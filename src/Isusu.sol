@@ -1,0 +1,411 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+interface IAgentId {
+    function balanceOf(address owner) external view returns (uint256);
+}
+
+/// @title Isusu
+/// @notice Permissionless rotating savings circles (Ajo/Esusu) settled in USDT.
+/// @dev One deployment hosts many circles. There is no owner and no admin function.
+///
+///      Rules
+///      -----
+///      - Only an Agent ID holder (balanceOf > 0) may create a circle or join one.
+///      - A circle has `slots` (N) members and pays slot r in round r.
+///      - Joining costs the round-1 contribution plus collateral of
+///        `contribution * (N - slot)`. Collateral is exactly the amount a member
+///        still owes after receiving their payout, so a post-payout default is
+///        always fully covered.
+///      - Members choose their slot on join. Slots are unique and final.
+///      - A round closes as soon as every active member has paid. Otherwise
+///        anyone may call `closeRound` after the deadline plus a 24h grace
+///        period; unpaid members are charged from their own collateral.
+///      - A member whose collateral cannot cover a charge is marked defaulted:
+///        their future payout slot is forfeited, and the pot collected in that
+///        round is used to compensate members who were paid a short pot, with
+///        any remainder refunded pro rata.
+///      - After the final round every member withdraws their remaining credit.
+contract Isusu is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    uint8 public constant MIN_SLOTS = 2;
+    uint8 public constant MAX_SLOTS = 20;
+    uint64 public constant GRACE_PERIOD = 24 hours;
+    uint64 public constant MIN_ROUND_DURATION = 1 hours;
+    uint64 public constant MAX_ROUND_DURATION = 365 days;
+
+    IERC20 public immutable usdt;
+    IAgentId public immutable agentId;
+
+    uint256 public circleCount;
+
+    struct Member {
+        uint8 slot;
+        bool defaulted;
+        bool paid; // paid for the current round
+        uint8 roundsPaid;
+        uint256 credit; // refundable collateral not yet slashed
+        uint256 owed; // compensation owed after a short payout
+    }
+
+    struct Circle {
+        address creator;
+        uint128 contribution;
+        uint64 roundDuration;
+        uint64 deadline;
+        uint256 pot;
+        uint256 pool; // withheld funds used for compensation and refunds
+        uint256 totalOwed;
+        uint8 slots;
+        uint8 joined;
+        uint8 active;
+        uint8 round;
+        uint8 paidCount;
+        bool finished;
+        mapping(uint8 slot => address) slotOwner;
+        mapping(address member => Member) members;
+        address[] memberList;
+    }
+
+    struct CircleView {
+        address creator;
+        uint128 contribution;
+        uint64 roundDuration;
+        uint64 deadline;
+        uint256 pot;
+        uint256 pool;
+        uint8 slots;
+        uint8 joined;
+        uint8 active;
+        uint8 round;
+        bool finished;
+    }
+
+    mapping(uint256 id => Circle) private _circles;
+
+    event CircleCreated(
+        uint256 indexed id, address indexed creator, uint128 contribution, uint8 slots, uint64 roundDuration
+    );
+    event Joined(uint256 indexed id, address indexed member, uint8 slot, uint256 amountPaid);
+    event Started(uint256 indexed id);
+    event RoundOpened(uint256 indexed id, uint8 round, uint64 deadline);
+    event Contributed(uint256 indexed id, address indexed member, uint8 round);
+    event RoundSettled(uint256 indexed id, uint8 round, address indexed recipient, uint256 pot);
+    event Defaulted(uint256 indexed id, address indexed member, uint8 round);
+    event Withdrawn(uint256 indexed id, address indexed member, uint256 amount);
+
+    error NotAgentHolder();
+    error UnknownCircle();
+    error ZeroContribution();
+    error BadSlotCount();
+    error BadRoundDuration();
+    error CircleFull();
+    error CircleFinished();
+    error NotStarted();
+    error BadSlot();
+    error SlotTaken();
+    error AlreadyMember();
+    error NotMember();
+    error AlreadyPaid();
+    error NotOverdue();
+    error NotFinished();
+    error NothingToWithdraw();
+
+    constructor(IERC20 usdt_, IAgentId agentId_) {
+        usdt = usdt_;
+        agentId = agentId_;
+    }
+
+    // ---------------------------------------------------------------------
+    // Circle lifecycle
+    // ---------------------------------------------------------------------
+
+    function createCircle(uint128 contribution, uint8 slots, uint64 roundDuration) external returns (uint256 id) {
+        if (agentId.balanceOf(msg.sender) == 0) revert NotAgentHolder();
+        if (contribution == 0) revert ZeroContribution();
+        if (slots < MIN_SLOTS || slots > MAX_SLOTS) revert BadSlotCount();
+        if (roundDuration < MIN_ROUND_DURATION || roundDuration > MAX_ROUND_DURATION) revert BadRoundDuration();
+
+        id = ++circleCount;
+        Circle storage c = _circles[id];
+        c.creator = msg.sender;
+        c.contribution = contribution;
+        c.roundDuration = roundDuration;
+        c.slots = slots;
+
+        emit CircleCreated(id, msg.sender, contribution, slots, roundDuration);
+    }
+
+    /// @notice Take a payout slot. Pulls the round-1 contribution plus collateral.
+    function join(uint256 id, uint8 slot) external nonReentrant {
+        Circle storage c = _get(id);
+        if (c.finished) revert CircleFinished();
+        if (c.joined == c.slots) revert CircleFull();
+        if (agentId.balanceOf(msg.sender) == 0) revert NotAgentHolder();
+        if (slot == 0 || slot > c.slots) revert BadSlot();
+        if (c.slotOwner[slot] != address(0)) revert SlotTaken();
+        if (c.members[msg.sender].slot != 0) revert AlreadyMember();
+
+        uint256 collateral = uint256(c.contribution) * (c.slots - slot);
+        uint256 amount = collateral + c.contribution;
+
+        Member storage m = c.members[msg.sender];
+        m.slot = slot;
+        m.paid = true; // round 1 is paid at join
+        m.roundsPaid = 1;
+        m.credit = collateral;
+
+        c.slotOwner[slot] = msg.sender;
+        c.memberList.push(msg.sender);
+        c.joined += 1;
+        c.active += 1;
+        c.pot += c.contribution;
+        c.paidCount += 1;
+
+        usdt.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit Joined(id, msg.sender, slot, amount);
+
+        if (c.joined == c.slots) {
+            c.round = 1;
+            emit Started(id);
+            _settle(id, c, uint256(c.active) * c.contribution);
+        }
+    }
+
+    function contribute(uint256 id) external nonReentrant {
+        Circle storage c = _get(id);
+        if (c.finished) revert CircleFinished();
+        if (c.joined < c.slots) revert NotStarted();
+
+        Member storage m = c.members[msg.sender];
+        if (m.slot == 0) revert NotMember();
+        if (m.defaulted) revert NotMember();
+        if (m.paid) revert AlreadyPaid();
+
+        m.paid = true;
+        m.roundsPaid += 1;
+        c.pot += c.contribution;
+        c.paidCount += 1;
+
+        usdt.safeTransferFrom(msg.sender, address(this), c.contribution);
+
+        emit Contributed(id, msg.sender, c.round);
+
+        if (c.paidCount == c.active) {
+            _settle(id, c, uint256(c.active) * c.contribution);
+        }
+    }
+
+    /// @notice Close an overdue round, charging unpaid members from their collateral.
+    function closeRound(uint256 id) external nonReentrant {
+        Circle storage c = _get(id);
+        if (c.finished) revert CircleFinished();
+        if (c.joined < c.slots) revert NotStarted();
+        if (block.timestamp <= uint256(c.deadline) + GRACE_PERIOD) revert NotOverdue();
+
+        uint256 expected = uint256(c.active) * c.contribution;
+        address[] storage list = c.memberList;
+
+        for (uint256 i; i < list.length; ++i) {
+            Member storage m = c.members[list[i]];
+            if (m.defaulted || m.paid) continue;
+
+            uint256 charge = c.contribution;
+            uint256 fromCredit = m.credit < charge ? m.credit : charge;
+            m.credit -= fromCredit;
+            c.pot += fromCredit;
+            m.paid = true;
+
+            if (fromCredit < charge) {
+                m.defaulted = true;
+                c.active -= 1;
+                emit Defaulted(id, list[i], c.round);
+            }
+        }
+
+        _settle(id, c, expected);
+    }
+
+    /// @notice Withdraw refundable collateral (and compensation) after the circle ends.
+    function withdraw(uint256 id) external nonReentrant {
+        Circle storage c = _get(id);
+        if (!c.finished) revert NotFinished();
+
+        Member storage m = c.members[msg.sender];
+        if (m.slot == 0) revert NotMember();
+
+        uint256 amount = m.credit;
+        if (amount == 0) revert NothingToWithdraw();
+        m.credit = 0;
+
+        usdt.safeTransfer(msg.sender, amount);
+        emit Withdrawn(id, msg.sender, amount);
+    }
+
+    // ---------------------------------------------------------------------
+    // Settlement
+    // ---------------------------------------------------------------------
+
+    function _settle(uint256 id, Circle storage c, uint256 expectedPot) private {
+        uint8 r = c.round;
+        uint256 pot = c.pot;
+        address recipient = c.slotOwner[r];
+
+        c.pot = 0;
+        c.paidCount = 0;
+
+        if (recipient != address(0) && !c.members[recipient].defaulted) {
+            if (pot < expectedPot) {
+                uint256 shortfall = expectedPot - pot;
+                c.members[recipient].owed += shortfall;
+                c.totalOwed += shortfall;
+            }
+            if (pot > 0) usdt.safeTransfer(recipient, pot);
+            emit RoundSettled(id, r, recipient, pot);
+        } else {
+            // The slot owner defaulted (or no owner); keep the pot for compensation.
+            c.pool += pot;
+            emit RoundSettled(id, r, address(0), pot);
+        }
+
+        address[] storage list = c.memberList;
+        uint256 len = list.length;
+        for (uint256 i; i < len; ++i) {
+            c.members[list[i]].paid = false;
+        }
+
+        if (r == c.slots) {
+            c.finished = true;
+            c.round = r + 1;
+            _distributePool(c);
+        } else {
+            c.round = r + 1;
+            c.deadline = uint64(block.timestamp) + c.roundDuration;
+            emit RoundOpened(id, c.round, c.deadline);
+        }
+    }
+
+    /// @dev Compensate shorted recipients first, then refund the remainder pro rata
+    ///      by rounds actually paid. Runs once, when the final round settles.
+    function _distributePool(Circle storage c) private {
+        uint256 pool = c.pool;
+        c.pool = 0;
+
+        address[] storage list = c.memberList;
+        uint256 len = list.length;
+
+        uint256 owedTotal = c.totalOwed;
+        c.totalOwed = 0;
+
+        if (pool > 0 && owedTotal > 0) {
+            uint256 available = pool < owedTotal ? pool : owedTotal;
+            uint256 allocated;
+            for (uint256 i; i < len; ++i) {
+                Member storage m = c.members[list[i]];
+                if (m.owed == 0) continue;
+                uint256 pay = (m.owed * available) / owedTotal;
+                m.owed = 0;
+                m.credit += pay;
+                allocated += pay;
+            }
+            // Rounding dust, and any unpaid balance of a partial compensation,
+            // is written off; it falls through to the pro rata refund below.
+            pool -= allocated;
+        } else if (owedTotal > 0) {
+            for (uint256 i; i < len; ++i) {
+                c.members[list[i]].owed = 0;
+            }
+        }
+
+        if (pool == 0) return;
+
+        uint256 weight;
+        for (uint256 i; i < len; ++i) {
+            Member storage m = c.members[list[i]];
+            if (!m.defaulted) weight += m.roundsPaid;
+        }
+
+        if (weight == 0) {
+            // Every member defaulted; nothing sensible to refund against.
+            if (len > 0) c.members[list[0]].credit += pool;
+            return;
+        }
+
+        uint256 refunded;
+        uint256 last;
+        for (uint256 i; i < len; ++i) {
+            Member storage m = c.members[list[i]];
+            if (m.defaulted) continue;
+            uint256 share = (pool * m.roundsPaid) / weight;
+            m.credit += share;
+            refunded += share;
+            last = i;
+        }
+        // Integer-division dust goes to the last non-defaulted member so the
+        // circle's liabilities match its balance exactly.
+        if (pool > refunded) c.members[list[last]].credit += pool - refunded;
+    }
+
+    // ---------------------------------------------------------------------
+    // Views
+    // ---------------------------------------------------------------------
+
+    function getCircle(uint256 id) external view returns (CircleView memory v) {
+        Circle storage c = _get(id);
+        v = CircleView({
+            creator: c.creator,
+            contribution: c.contribution,
+            roundDuration: c.roundDuration,
+            deadline: c.deadline,
+            pot: c.pot,
+            pool: c.pool,
+            slots: c.slots,
+            joined: c.joined,
+            active: c.active,
+            round: c.round,
+            finished: c.finished
+        });
+    }
+
+    function getMember(uint256 id, address who) external view returns (Member memory) {
+        return _get(id).members[who];
+    }
+
+    function slotOwner(uint256 id, uint8 slot) external view returns (address) {
+        return _get(id).slotOwner[slot];
+    }
+
+    function memberCount(uint256 id) external view returns (uint256) {
+        return _get(id).memberList.length;
+    }
+
+    function memberAt(uint256 id, uint256 index) external view returns (address) {
+        return _get(id).memberList[index];
+    }
+
+    /// @notice USDT the contract is holding on behalf of a circle.
+    function circleBalance(uint256 id) external view returns (uint256) {
+        Circle storage c = _get(id);
+        uint256 obligations = c.pot + c.pool;
+        address[] storage list = c.memberList;
+        for (uint256 i; i < list.length; ++i) {
+            obligations += c.members[list[i]].credit;
+        }
+        return obligations;
+    }
+
+    // ---------------------------------------------------------------------
+    // Internals
+    // ---------------------------------------------------------------------
+
+    function _get(uint256 id) private view returns (Circle storage) {
+        if (id == 0 || id > circleCount) revert UnknownCircle();
+        return _circles[id];
+    }
+}
