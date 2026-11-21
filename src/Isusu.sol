@@ -16,11 +16,15 @@ interface IAgentId {
 ///      Rules
 ///      -----
 ///      - Only an Agent ID holder (balanceOf > 0) may create a circle or join one.
-///      - A circle has `slots` (N) members and pays slot r in round r.
+///      - A circle has `slots` (N) members and pays slot r in round r. It must
+///        fill before its join deadline (1 to 14 days after creation).
 ///      - Joining costs the round-1 contribution plus collateral of
 ///        `contribution * (N - slot)`. Collateral is exactly the amount a member
 ///        still owes after receiving their payout, so it only secures rounds
 ///        after the payout.
+///      - If the deadline passes and the circle is not full, anyone may call
+///        `cancelCircle`. Every member then pulls a full refund of their round-1
+///        contribution and collateral with `withdraw`.
 ///      - Members choose their slot on join. Slots are unique and final.
 ///      - A round closes as soon as every active member has paid. Otherwise
 ///        anyone may call `closeRound` after the deadline plus a 24h grace
@@ -40,6 +44,8 @@ contract Isusu is ReentrancyGuard {
     uint64 public constant GRACE_PERIOD = 24 hours;
     uint64 public constant MIN_ROUND_DURATION = 1 hours;
     uint64 public constant MAX_ROUND_DURATION = 365 days;
+    uint64 public constant MIN_JOIN_WINDOW = 1 days;
+    uint64 public constant MAX_JOIN_WINDOW = 14 days;
 
     IERC20 public immutable usdt;
     IAgentId public immutable agentId;
@@ -59,6 +65,7 @@ contract Isusu is ReentrancyGuard {
         address creator;
         uint128 contribution;
         uint64 roundDuration;
+        uint64 joinDeadline;
         uint64 deadline;
         uint256 pot;
         uint256 pool; // withheld funds used for compensation and refunds
@@ -68,6 +75,7 @@ contract Isusu is ReentrancyGuard {
         uint8 round;
         uint8 paidCount;
         bool finished;
+        bool cancelled;
         mapping(uint8 slot => address) slotOwner;
         mapping(address member => Member) members;
         address[] memberList;
@@ -77,6 +85,7 @@ contract Isusu is ReentrancyGuard {
         address creator;
         uint128 contribution;
         uint64 roundDuration;
+        uint64 joinDeadline;
         uint64 deadline;
         uint256 pot;
         uint256 pool;
@@ -85,12 +94,18 @@ contract Isusu is ReentrancyGuard {
         uint8 active;
         uint8 round;
         bool finished;
+        bool cancelled;
     }
 
     mapping(uint256 id => Circle) private _circles;
 
     event CircleCreated(
-        uint256 indexed id, address indexed creator, uint128 contribution, uint8 slots, uint64 roundDuration
+        uint256 indexed id,
+        address indexed creator,
+        uint128 contribution,
+        uint8 slots,
+        uint64 roundDuration,
+        uint64 joinDeadline
     );
     event Joined(uint256 indexed id, address indexed member, uint8 slot, uint256 amountPaid);
     event Started(uint256 indexed id);
@@ -99,6 +114,7 @@ contract Isusu is ReentrancyGuard {
     event RoundSettled(uint256 indexed id, uint8 round, address indexed recipient, uint256 pot);
     event Defaulted(uint256 indexed id, address indexed member, uint8 round);
     event Withdrawn(uint256 indexed id, address indexed member, uint256 amount);
+    event Cancelled(uint256 indexed id);
 
     error NotAgentHolder();
     error UnknownCircle();
@@ -116,6 +132,9 @@ contract Isusu is ReentrancyGuard {
     error NotOverdue();
     error NotFinished();
     error NothingToWithdraw();
+    error BadJoinDeadline();
+    error JoinClosed();
+    error JoinStillOpen();
 
     constructor(IERC20 usdt_, IAgentId agentId_) {
         usdt = usdt_;
@@ -126,20 +145,27 @@ contract Isusu is ReentrancyGuard {
     // Circle lifecycle
     // ---------------------------------------------------------------------
 
-    function createCircle(uint128 contribution, uint8 slots, uint64 roundDuration) external returns (uint256 id) {
+    function createCircle(uint128 contribution, uint8 slots, uint64 roundDuration, uint64 joinDeadline)
+        external
+        returns (uint256 id)
+    {
         if (agentId.balanceOf(msg.sender) == 0) revert NotAgentHolder();
         if (contribution == 0) revert ZeroContribution();
         if (slots < MIN_SLOTS || slots > MAX_SLOTS) revert BadSlotCount();
         if (roundDuration < MIN_ROUND_DURATION || roundDuration > MAX_ROUND_DURATION) revert BadRoundDuration();
+        if (joinDeadline < block.timestamp + MIN_JOIN_WINDOW || joinDeadline > block.timestamp + MAX_JOIN_WINDOW) {
+            revert BadJoinDeadline();
+        }
 
         id = ++circleCount;
         Circle storage c = _circles[id];
         c.creator = msg.sender;
         c.contribution = contribution;
         c.roundDuration = roundDuration;
+        c.joinDeadline = joinDeadline;
         c.slots = slots;
 
-        emit CircleCreated(id, msg.sender, contribution, slots, roundDuration);
+        emit CircleCreated(id, msg.sender, contribution, slots, roundDuration, joinDeadline);
     }
 
     /// @notice Take a payout slot. Pulls the round-1 contribution plus collateral.
@@ -147,6 +173,7 @@ contract Isusu is ReentrancyGuard {
         Circle storage c = _get(id);
         if (c.finished) revert CircleFinished();
         if (c.joined == c.slots) revert CircleFull();
+        if (block.timestamp > c.joinDeadline) revert JoinClosed();
         if (agentId.balanceOf(msg.sender) == 0) revert NotAgentHolder();
         if (slot == 0 || slot > c.slots) revert BadSlot();
         if (c.slotOwner[slot] != address(0)) revert SlotTaken();
@@ -246,6 +273,32 @@ contract Isusu is ReentrancyGuard {
         }
 
         _settle(id, c);
+    }
+
+    /// @notice Cancel a circle that never filled. Members then pull their full
+    ///         round-1 contribution plus collateral with `withdraw`.
+    function cancelCircle(uint256 id) external nonReentrant {
+        Circle storage c = _get(id);
+        if (c.finished) revert CircleFinished();
+        if (c.joined == c.slots) revert CircleFull();
+        if (block.timestamp <= c.joinDeadline) revert JoinStillOpen();
+
+        c.finished = true;
+        c.cancelled = true;
+        c.pot = 0;
+        c.pool = 0;
+        c.active = 0;
+        c.round = 0;
+
+        address[] storage list = c.memberList;
+        for (uint256 i; i < list.length; ++i) {
+            Member storage m = c.members[list[i]];
+            m.credit = m.deposited;
+            m.deposited = 0;
+            m.paid = false;
+        }
+
+        emit Cancelled(id);
     }
 
     /// @notice Withdraw refundable collateral (and compensation) after the circle ends.
@@ -378,6 +431,7 @@ contract Isusu is ReentrancyGuard {
             creator: c.creator,
             contribution: c.contribution,
             roundDuration: c.roundDuration,
+            joinDeadline: c.joinDeadline,
             deadline: c.deadline,
             pot: c.pot,
             pool: c.pool,
@@ -385,7 +439,8 @@ contract Isusu is ReentrancyGuard {
             joined: c.joined,
             active: c.active,
             round: c.round,
-            finished: c.finished
+            finished: c.finished,
+            cancelled: c.cancelled
         });
     }
 

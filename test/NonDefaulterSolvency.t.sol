@@ -54,7 +54,7 @@ contract NonDefaulterSolvencyTest is Test {
         }
 
         vm.prank(creator);
-        id = isusu.createCircle(uint128(C), n, DUR);
+        id = isusu.createCircle(uint128(C), n, DUR, uint64(block.timestamp + 7 days));
 
         for (uint256 i; i < n; ++i) {
             vm.prank(members[i]);
