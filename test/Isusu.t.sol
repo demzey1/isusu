@@ -254,8 +254,11 @@ contract IsusuTest is Test {
         uint256 id = _create();
         _joinAll(id);
 
-        // Round 2: only slots 1 and 4 pay; slots 2 and 3 have enough collateral.
-        vm.prank(members[0]);
+        // Round 2: slot 1 already received and skips; the rest pay. Its
+        // collateral, not its cash, must cover the missed round.
+        vm.prank(members[1]);
+        isusu.contribute(id);
+        vm.prank(members[2]);
         isusu.contribute(id);
         vm.prank(members[3]);
         isusu.contribute(id);
@@ -263,11 +266,29 @@ contract IsusuTest is Test {
         vm.warp(uint256(isusu.getCircle(id).deadline) + 24 hours + 1);
         isusu.closeRound(id);
 
-        assertEq(usdt.balanceOf(members[1]), 1_000_000e18 + C, "slot2 net: pot minus join cost");
-        assertEq(isusu.getMember(id, members[1]).credit, C, "slot2 collateral charged once");
-        assertEq(isusu.getMember(id, members[2]).credit, 0, "slot3 collateral exhausted");
-        assertFalse(isusu.getMember(id, members[1]).defaulted);
+        assertEq(isusu.getMember(id, members[1]).received, C * N, "slot2 got the full pot");
+        assertEq(isusu.getMember(id, members[0]).credit, C * (N - 1) - C, "slot1 collateral charged once");
+        assertFalse(isusu.getMember(id, members[0]).defaulted, "post-payout charge is not a default");
         assertEq(isusu.getCircle(id).active, N, "nobody defaulted");
+        _assertSolvent();
+    }
+
+    /// @dev Collateral only secures rounds after payout, so a missed payment in
+    ///      any earlier round is a default.
+    function testPrePayoutMissIsADefault() public {
+        uint256 id = _create();
+        _joinAll(id);
+
+        for (uint256 i; i < N - 1; ++i) {
+            vm.prank(members[i]);
+            isusu.contribute(id);
+        }
+        // Slot N (zero collateral) skips round 2.
+        vm.warp(uint256(isusu.getCircle(id).deadline) + 24 hours + 1);
+        isusu.closeRound(id);
+
+        assertTrue(isusu.getMember(id, members[3]).defaulted, "slotN defaulted");
+        assertEq(isusu.getCircle(id).active, N - 1, "removed from rotation");
         _assertSolvent();
     }
 
@@ -331,8 +352,8 @@ contract IsusuTest is Test {
 
         // Round 4 (slot 4's slot) was forfeited into the pool and pays the shortfall.
         Isusu.Member memory shorted = isusu.getMember(id, members[1]);
-        assertGt(shorted.credit, C * (N - 1), "slot2 compensated above its collateral");
-        assertEq(shorted.owed, 0, "debt settled");
+        assertEq(shorted.received, C * (N - 1), "only one short pot");
+        assertGe(shorted.credit, C * (N - 1), "compensated above its collateral");
         _assertSolvent();
     }
 

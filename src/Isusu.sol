@@ -19,16 +19,18 @@ interface IAgentId {
 ///      - A circle has `slots` (N) members and pays slot r in round r.
 ///      - Joining costs the round-1 contribution plus collateral of
 ///        `contribution * (N - slot)`. Collateral is exactly the amount a member
-///        still owes after receiving their payout, so a post-payout default is
-///        always fully covered.
+///        still owes after receiving their payout, so it only secures rounds
+///        after the payout.
 ///      - Members choose their slot on join. Slots are unique and final.
 ///      - A round closes as soon as every active member has paid. Otherwise
 ///        anyone may call `closeRound` after the deadline plus a 24h grace
-///        period; unpaid members are charged from their own collateral.
-///      - A member whose collateral cannot cover a charge is marked defaulted:
-///        their future payout slot is forfeited, and the pot collected in that
-///        round is used to compensate members who were paid a short pot, with
-///        any remainder refunded pro rata.
+///        period. After payout, unpaid rounds are charged from collateral.
+///      - Before payout, collateral is not a payment method: a member who misses
+///        a round is defaulted, forfeits their slot and their collateral goes to
+///        the pool. This stops a member from spending their security, collecting
+///        the pot and leaving.
+///      - At the end the pool first makes every non-defaulting member whole
+///        against what they paid in, then refunds any surplus pro rata.
 ///      - After the final round every member withdraws their remaining credit.
 contract Isusu is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -48,9 +50,9 @@ contract Isusu is ReentrancyGuard {
         uint8 slot;
         bool defaulted;
         bool paid; // paid for the current round
-        uint8 roundsPaid;
         uint256 credit; // refundable collateral not yet slashed
-        uint256 owed; // compensation owed after a short payout
+        uint256 deposited; // USDT transferred in: join amount plus contributions
+        uint256 received; // pots received
     }
 
     struct Circle {
@@ -60,7 +62,6 @@ contract Isusu is ReentrancyGuard {
         uint64 deadline;
         uint256 pot;
         uint256 pool; // withheld funds used for compensation and refunds
-        uint256 totalOwed;
         uint8 slots;
         uint8 joined;
         uint8 active;
@@ -157,8 +158,8 @@ contract Isusu is ReentrancyGuard {
         Member storage m = c.members[msg.sender];
         m.slot = slot;
         m.paid = true; // round 1 is paid at join
-        m.roundsPaid = 1;
         m.credit = collateral;
+        m.deposited = amount;
 
         c.slotOwner[slot] = msg.sender;
         c.memberList.push(msg.sender);
@@ -174,7 +175,7 @@ contract Isusu is ReentrancyGuard {
         if (c.joined == c.slots) {
             c.round = 1;
             emit Started(id);
-            _settle(id, c, uint256(c.active) * c.contribution);
+            _settle(id, c);
         }
     }
 
@@ -189,7 +190,7 @@ contract Isusu is ReentrancyGuard {
         if (m.paid) revert AlreadyPaid();
 
         m.paid = true;
-        m.roundsPaid += 1;
+        m.deposited += c.contribution;
         c.pot += c.contribution;
         c.paidCount += 1;
 
@@ -198,24 +199,39 @@ contract Isusu is ReentrancyGuard {
         emit Contributed(id, msg.sender, c.round);
 
         if (c.paidCount == c.active) {
-            _settle(id, c, uint256(c.active) * c.contribution);
+            _settle(id, c);
         }
     }
 
-    /// @notice Close an overdue round, charging unpaid members from their collateral.
+    /// @notice Close an overdue round. Post-payout members are charged from
+    ///         collateral; anyone still waiting for their pot is defaulted.
     function closeRound(uint256 id) external nonReentrant {
         Circle storage c = _get(id);
         if (c.finished) revert CircleFinished();
         if (c.joined < c.slots) revert NotStarted();
         if (block.timestamp <= uint256(c.deadline) + GRACE_PERIOD) revert NotOverdue();
 
-        uint256 expected = uint256(c.active) * c.contribution;
         address[] storage list = c.memberList;
 
         for (uint256 i; i < list.length; ++i) {
             Member storage m = c.members[list[i]];
             if (m.defaulted || m.paid) continue;
 
+            if (c.round <= m.slot) {
+                // Before receiving the pot, collateral is not a payment method:
+                // using it here would leave nothing securing the rounds after
+                // payout, and the member could collect and walk away.
+                m.defaulted = true;
+                c.active -= 1;
+                if (m.credit > 0) {
+                    c.pool += m.credit;
+                    m.credit = 0;
+                }
+                emit Defaulted(id, list[i], c.round);
+                continue;
+            }
+
+            // After payout, collateral is exactly the remaining obligation.
             uint256 charge = c.contribution;
             uint256 fromCredit = m.credit < charge ? m.credit : charge;
             m.credit -= fromCredit;
@@ -229,7 +245,7 @@ contract Isusu is ReentrancyGuard {
             }
         }
 
-        _settle(id, c, expected);
+        _settle(id, c);
     }
 
     /// @notice Withdraw refundable collateral (and compensation) after the circle ends.
@@ -252,7 +268,7 @@ contract Isusu is ReentrancyGuard {
     // Settlement
     // ---------------------------------------------------------------------
 
-    function _settle(uint256 id, Circle storage c, uint256 expectedPot) private {
+    function _settle(uint256 id, Circle storage c) private {
         uint8 r = c.round;
         uint256 pot = c.pot;
         address recipient = c.slotOwner[r];
@@ -261,12 +277,8 @@ contract Isusu is ReentrancyGuard {
         c.paidCount = 0;
 
         if (recipient != address(0) && !c.members[recipient].defaulted) {
-            if (pot < expectedPot) {
-                uint256 shortfall = expectedPot - pot;
-                c.members[recipient].owed += shortfall;
-                c.totalOwed += shortfall;
-            }
             if (pot > 0) usdt.safeTransfer(recipient, pot);
+            c.members[recipient].received += pot;
             emit RoundSettled(id, r, recipient, pot);
         } else {
             // The slot owner defaulted (or no owner); keep the pot for compensation.
@@ -291,36 +303,40 @@ contract Isusu is ReentrancyGuard {
         }
     }
 
-    /// @dev Compensate shorted recipients first, then refund the remainder pro rata
-    ///      by rounds actually paid. Runs once, when the final round settles.
+    /// @dev Make every non-defaulting member whole first: a member whose pots and
+    ///      remaining collateral are worth less than what they paid in is topped
+    ///      up from the pool pro rata to their deficit. Any surplus is refunded
+    ///      pro rata to what each non-defaulting member paid in.
     function _distributePool(Circle storage c) private {
         uint256 pool = c.pool;
         c.pool = 0;
+        if (pool == 0) return;
 
         address[] storage list = c.memberList;
         uint256 len = list.length;
 
-        uint256 owedTotal = c.totalOwed;
-        c.totalOwed = 0;
+        uint256 totalDeficit;
+        for (uint256 i; i < len; ++i) {
+            Member storage m = c.members[list[i]];
+            if (m.defaulted) continue;
+            uint256 out = m.received + m.credit;
+            if (m.deposited > out) totalDeficit += m.deposited - out;
+        }
 
-        if (pool > 0 && owedTotal > 0) {
-            uint256 available = pool < owedTotal ? pool : owedTotal;
+        if (totalDeficit > 0) {
+            uint256 available = pool < totalDeficit ? pool : totalDeficit;
             uint256 allocated;
             for (uint256 i; i < len; ++i) {
                 Member storage m = c.members[list[i]];
-                if (m.owed == 0) continue;
-                uint256 pay = (m.owed * available) / owedTotal;
-                m.owed = 0;
+                if (m.defaulted) continue;
+                uint256 out = m.received + m.credit;
+                if (m.deposited <= out) continue;
+                uint256 pay = ((m.deposited - out) * available) / totalDeficit;
                 m.credit += pay;
                 allocated += pay;
             }
-            // Rounding dust, and any unpaid balance of a partial compensation,
-            // is written off; it falls through to the pro rata refund below.
+            // Rounding dust falls through to the refund below.
             pool -= allocated;
-        } else if (owedTotal > 0) {
-            for (uint256 i; i < len; ++i) {
-                c.members[list[i]].owed = 0;
-            }
         }
 
         if (pool == 0) return;
@@ -328,7 +344,7 @@ contract Isusu is ReentrancyGuard {
         uint256 weight;
         for (uint256 i; i < len; ++i) {
             Member storage m = c.members[list[i]];
-            if (!m.defaulted) weight += m.roundsPaid;
+            if (!m.defaulted) weight += m.deposited;
         }
 
         if (weight == 0) {
@@ -342,7 +358,7 @@ contract Isusu is ReentrancyGuard {
         for (uint256 i; i < len; ++i) {
             Member storage m = c.members[list[i]];
             if (m.defaulted) continue;
-            uint256 share = (pool * m.roundsPaid) / weight;
+            uint256 share = (pool * m.deposited) / weight;
             m.credit += share;
             refunded += share;
             last = i;
