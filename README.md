@@ -17,17 +17,19 @@ The member in slot `r` receives the pot in round `r`.
 - **Contribute** — `contribute(id)` pulls one contribution. The round settles as
   soon as every active member has paid; the pot goes to that round's slot owner.
 - **Overdue rounds** — after the deadline plus a 24h grace period, anyone may call
-  `closeRound(id)`. Unpaid members are charged from their own collateral, so the
-  pot stays whole. A member whose collateral cannot cover the charge is marked
-  defaulted: their payout slot is forfeited and the pot collected in that round
-  compensates members who were paid short, with the remainder refunded pro rata.
-- **Refunds** — after the final round each member calls `withdraw(id)` to take
-  back their unspent collateral.
+  `closeRound(id)`. A member who has already received their pot is charged from
+  collateral, so the pot stays whole. A member who has *not* received yet is
+  defaulted instead: collateral is post-payout security only, otherwise a member
+  could spend it early, collect the pot and leave. On default the slot is
+  forfeited and the remaining collateral joins the pool.
+- **Refunds** — after the final round the pool first tops up any non-defaulting
+  member whose pots plus collateral are worth less than what they paid in, then
+  splits any surplus pro rata by amount paid. Each member then calls `withdraw(id)`.
 
 Collateral equals exactly the contributions a member still owes after receiving
-their payout, so a member who takes the pot and disappears can always be fully
-charged. Shortfalls can only originate before payout; those are covered by the
-forfeited slot and proven in the tests.
+their payout. That is why it cannot be used before payout: spending it would
+leave the post-payout rounds unsecured, which is what let a member collect and
+walk away in the original design.
 
 ## Build and test
 
