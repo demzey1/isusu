@@ -9,7 +9,7 @@ const STEPS = [
   {
     number: "01",
     title: "Pick your seat",
-    body: "Seat 1 takes the pot first. Seat 5 or 10 waits longest and pays the least collateral today. Your seat is yours alone.",
+    body: "Seat 1 takes the pot first. Seat 5 waits longest and pays the least collateral today. Your seat is yours alone.",
   },
   {
     number: "02",
@@ -80,8 +80,8 @@ export default function HomePage() {
 
             <dl className="mt-9 flex flex-wrap gap-x-8 gap-y-4 border-t border-cream/10 pt-6 text-sm">
               {[
-                ["5 or 10", "people per circle"],
-                ["USDT", "same amount each round"],
+                ["5", "people per circle"],
+                ["1 or 2", "USDT each round"],
                 ["0", "admins with keys"],
               ].map(([value, label]) => (
                 <div key={label}>

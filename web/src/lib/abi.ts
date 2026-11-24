@@ -30,7 +30,7 @@ export const isusuAbi = [
   },
   {
     "type": "function",
-    "name": "MAX_JOIN_WINDOW",
+    "name": "ONE_DAY",
     "inputs": [],
     "outputs": [
       {
@@ -43,7 +43,20 @@ export const isusuAbi = [
   },
   {
     "type": "function",
-    "name": "MAX_ROUND_DURATION",
+    "name": "ONE_USDT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "SEVEN_DAYS",
     "inputs": [],
     "outputs": [
       {
@@ -56,7 +69,7 @@ export const isusuAbi = [
   },
   {
     "type": "function",
-    "name": "MAX_SLOTS",
+    "name": "SLOTS",
     "inputs": [],
     "outputs": [
       {
@@ -69,7 +82,7 @@ export const isusuAbi = [
   },
   {
     "type": "function",
-    "name": "MIN_JOIN_WINDOW",
+    "name": "THREE_DAYS",
     "inputs": [],
     "outputs": [
       {
@@ -82,26 +95,13 @@ export const isusuAbi = [
   },
   {
     "type": "function",
-    "name": "MIN_ROUND_DURATION",
+    "name": "TWO_USDT",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MIN_SLOTS",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
+        "type": "uint128",
+        "internalType": "uint128"
       }
     ],
     "stateMutability": "view"
@@ -115,6 +115,25 @@ export const isusuAbi = [
         "name": "",
         "type": "address",
         "internalType": "contract IAgentId"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "avatarOf",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "stateMutability": "view"
@@ -200,17 +219,12 @@ export const isusuAbi = [
         "internalType": "uint128"
       },
       {
-        "name": "slots",
-        "type": "uint8",
-        "internalType": "uint8"
-      },
-      {
         "name": "roundDuration",
         "type": "uint64",
         "internalType": "uint64"
       },
       {
-        "name": "joinDeadline",
+        "name": "joinWindow",
         "type": "uint64",
         "internalType": "uint64"
       }
@@ -360,6 +374,11 @@ export const isusuAbi = [
             "name": "received",
             "type": "uint256",
             "internalType": "uint256"
+          },
+          {
+            "name": "owed",
+            "type": "uint256",
+            "internalType": "uint256"
           }
         ]
       }
@@ -429,6 +448,19 @@ export const isusuAbi = [
   },
   {
     "type": "function",
+    "name": "setAvatar",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "slotOwner",
     "inputs": [
       {
@@ -476,6 +508,25 @@ export const isusuAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "AvatarSet",
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "avatar",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "event",
@@ -616,6 +667,37 @@ export const isusuAbi = [
   },
   {
     "type": "event",
+    "name": "PayoutDeferred",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "round",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "member",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "RoundOpened",
     "inputs": [
       {
@@ -720,6 +802,16 @@ export const isusuAbi = [
   },
   {
     "type": "error",
+    "name": "BadAvatar",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadContribution",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadJoinDeadline",
     "inputs": []
   },
@@ -731,11 +823,6 @@ export const isusuAbi = [
   {
     "type": "error",
     "name": "BadSlot",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "BadSlotCount",
     "inputs": []
   },
   {
@@ -812,11 +899,6 @@ export const isusuAbi = [
   {
     "type": "error",
     "name": "UnknownCircle",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ZeroContribution",
     "inputs": []
   }
 ] as const;

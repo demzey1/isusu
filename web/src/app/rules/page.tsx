@@ -12,11 +12,11 @@ export const metadata: Metadata = {
 };
 
 const SEAT_EXAMPLE = [
-  { seat: 1, collateral: 400, total: 500, wait: "First pot" },
-  { seat: 2, collateral: 300, total: 400, wait: "1 round" },
-  { seat: 3, collateral: 200, total: 300, wait: "2 rounds" },
-  { seat: 4, collateral: 100, total: 200, wait: "3 rounds" },
-  { seat: 5, collateral: 0, total: 100, wait: "4 rounds" },
+  { seat: 1, collateral: 4, total: 5, wait: "First pot" },
+  { seat: 2, collateral: 3, total: 4, wait: "1 round" },
+  { seat: 3, collateral: 2, total: 3, wait: "2 rounds" },
+  { seat: 4, collateral: 1, total: 2, wait: "3 rounds" },
+  { seat: 5, collateral: 0, total: 1, wait: "4 rounds" },
 ];
 
 export default function RulesPage() {
@@ -38,9 +38,13 @@ export default function RulesPage() {
 
           <Section n="01" title="A circle has seats and rounds">
             <p>
-              A circle has <strong>5 or 10 seats</strong> in this app (the contract allows 2 to 20). Every
-              member pays the same <strong>contribution</strong> every round. The pot is the contribution
-              multiplied by the number of seats.
+              A circle has <strong>five seats</strong>. Every member pays the same{" "}
+              <strong>contribution</strong> every round: either <strong>1 USDT</strong> or{" "}
+              <strong>2 USDT</strong>. That makes every pot exactly 5 or 10 USDT.
+            </p>
+            <p>
+              A round lasts 1, 3 or 7 days, and the circle must fill within 1, 3 or 7 days of being
+              created. Those choices are fixed at creation.
             </p>
             <p>
               Seat 1 is paid in round 1, seat 2 in round 2, and so on. The circle starts the moment the
@@ -77,7 +81,7 @@ export default function RulesPage() {
                         {row.total} USDT
                       </td>
                       <td className="px-3 py-2.5 text-xs text-ink/50 sm:px-4">
-                        500 USDT · {row.wait}
+                        5 USDT · {row.wait}
                       </td>
                     </tr>
                   ))}
@@ -85,8 +89,8 @@ export default function RulesPage() {
               </table>
             </div>
             <p className="mt-2 text-xs text-ink/40">
-              Example: a 5-seat circle with a 100 USDT contribution. Your actual amounts are always shown
-              before you sign anything.
+              Example: a five-seat circle with a 1 USDT contribution. Your actual amounts are always
+              shown before you sign anything.
             </p>
           </Section>
 
@@ -134,8 +138,8 @@ export default function RulesPage() {
 
           <Section n="06" title="Not full by the deadline means a full refund">
             <p>
-              Every circle sets a join deadline when it is created — between 1 and 14 days. No one can
-              join after it. If the circle isn&apos;t full by then, <strong>anyone can cancel it</strong>.
+              Every circle sets a join window when it is created — 1, 3 or 7 days. No one can join
+              after it. If the circle isn&apos;t full by then, <strong>anyone can cancel it</strong>.
             </p>
             <p>
               Cancelling doesn&apos;t push money around. Each member then calls withdraw and pulls back

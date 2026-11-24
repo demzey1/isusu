@@ -187,7 +187,7 @@ export function RoundPanel({
 
   // -------------------------------------------------------------- cancelled
   if (status === "cancelled") {
-    const refund = member?.credit ?? 0n;
+    const refund = (member?.credit ?? 0n) + (member?.owed ?? 0n);
     return (
       <div className={panelClass}>
         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-clay">Cancelled</p>
@@ -240,6 +240,9 @@ export function RoundPanel({
               label: "Collateral",
               value: member ? `${formatUsdt(member.credit - view.contribution)} USDT` : "—",
             },
+            ...(member && member.owed > 0n
+              ? [{ label: "Held payout", value: `${formatUsdt(member.owed)} USDT` }]
+              : []),
             { label: "You receive", value: `${formatUsdt(refund)} USDT`, strong: true },
           ]}
           note="This sends the USDT to your connected wallet. No approval is needed."
@@ -254,7 +257,7 @@ export function RoundPanel({
 
   // --------------------------------------------------------------- finished
   if (status === "finished") {
-    const credit = member?.credit ?? 0n;
+    const credit = (member?.credit ?? 0n) + (member?.owed ?? 0n);
     return (
       <div className={panelClass}>
         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-moss">Complete</p>
@@ -317,7 +320,7 @@ export function RoundPanel({
           onConfirm={confirm}
           title="Withdraw what's left"
           rows={[
-            { label: "Your remaining credit", value: `${formatUsdt(credit)} USDT`, strong: true },
+            { label: "Your credit + held payout", value: `${formatUsdt(credit)} USDT`, strong: true },
             { label: "Sent to", value: address ? shortAddress(address) : "—" },
           ]}
           note="This is your returned collateral plus any share of the compensation pool. No approval is needed."
@@ -413,6 +416,28 @@ export function RoundPanel({
                     : `You receive the pot in round ${mySlot}.`}
             </p>
           </div>
+
+          {member && member.owed > 0n && (
+            <div className="mt-3 rounded-2xl border border-moss/25 bg-moss/[0.07] p-4">
+              <p className="text-[0.68rem] uppercase tracking-[0.12em] text-moss/80">A payout is waiting</p>
+              <p className="tnum mt-1 font-mono text-2xl text-moss">{formatUsdt(member.owed)} USDT</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink/55">
+                The transfer could not reach your wallet, so the contract is holding it. You can
+                withdraw it at any time.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  tx.reset();
+                  setMode("withdraw");
+                }}
+                disabled={tx.busy}
+                className="mt-3 w-full rounded-full border border-moss/40 px-5 py-3 text-sm font-semibold text-moss transition hover:bg-moss/[0.06] disabled:opacity-40"
+              >
+                Withdraw {formatUsdt(member.owed)} USDT
+              </button>
+            </div>
+          )}
 
           {defaulted ? (
             <p className="mt-3 rounded-xl border border-clay/25 bg-clay/[0.07] p-3 text-sm text-clay">
@@ -526,6 +551,22 @@ export function RoundPanel({
         ]}
         note="Unpaid members who have not received the pot lose their seat and collateral. Unpaid members who already received the pot have USDT charged from their collateral. This keeps the pot whole and the circle moving."
         confirmLabel="Settle round"
+        pendingLabel={tx.phase === "confirming" ? "Waiting for the network…" : "Confirm in your wallet…"}
+        pending={tx.busy}
+        error={tx.error}
+      />
+
+      <ConfirmDialog
+        open={mode === "withdraw"}
+        onClose={() => !tx.busy && setMode(null)}
+        onConfirm={confirm}
+        title="Withdraw your held payout"
+        rows={[
+          { label: "Held payout", value: `${formatUsdt(member?.owed ?? 0n)} USDT`, strong: true },
+          { label: "Sent to", value: address ? shortAddress(address) : "—" },
+        ]}
+        note="A payout transfer failed, so the contract kept the pot for you. This sends it to your wallet now. No approval is needed."
+        confirmLabel="Withdraw"
         pendingLabel={tx.phase === "confirming" ? "Waiting for the network…" : "Confirm in your wallet…"}
         pending={tx.busy}
         error={tx.error}

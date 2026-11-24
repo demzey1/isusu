@@ -114,16 +114,12 @@ async function circle(id) {
   });
 }
 
-async function createCircle(creator, contribution, slots, roundDays, joinDays) {
-  const block = await publicClient.getBlock();
-  const window = BigInt(joinDays) * 86400n;
-  const deadline = block.timestamp + window + (joinDays <= 1 ? 300n : 0n) - (joinDays >= 14 ? 300n : 0n);
-
+async function createCircle(creator, contribution, roundDays, joinDays) {
   const receipt = await send(wallets[creator], {
     address: isusu,
     abi,
     functionName: "createCircle",
-    args: [parseUnits(String(contribution), 18), slots, BigInt(roundDays) * 86400n, deadline],
+    args: [parseUnits(String(contribution), 18), BigInt(roundDays) * 86400n, BigInt(joinDays) * 86400n],
   });
 
   const [event] = parseEventLogs({ abi, eventName: "CircleCreated", logs: receipt.logs });
@@ -249,21 +245,21 @@ async function main() {
 
   console.log("Seeding circles…");
 
-  // 1. Open, 3 of 5. Weekly, 100 USDT.
-  const open5 = await createCircle(0, 100, 5, 7, 7);
+  // 1. Open, 3 of 5. 1 USDT, weekly, one week to fill.
+  const open5 = await createCircle(0, 1, 7, 7);
   await join(0, open5, 1);
   await join(1, open5, 2);
   await join(2, open5, 3);
 
-  // 2. Open, 7 of 10. Monthly, 50 USDT.
-  const open10 = await createCircle(3, 50, 10, 30, 13);
-  const tenPlayers = [3, 4, 5, 6, 7, 0, 1];
-  for (let index = 0; index < tenPlayers.length; index += 1) {
-    await join(tenPlayers[index], open10, index + 1);
+  // 2. Open, 4 of 5. 2 USDT, every three days.
+  const openFour = await createCircle(3, 2, 3, 7);
+  const fourPlayers = [3, 4, 5, 6];
+  for (let index = 0; index < fourPlayers.length; index += 1) {
+    await join(fourPlayers[index], openFour, index + 1);
   }
 
-  // 3. Active, round 2, two late seats. Daily rounds.
-  const late = await createCircle(5, 100, 5, 1, 7);
+  // 3. Active, round 2, two late seats. 2 USDT, daily rounds.
+  const late = await createCircle(5, 2, 1, 7);
   await join(5, late, 1);
   await join(6, late, 2);
   await join(7, late, 3);
@@ -273,13 +269,13 @@ async function main() {
   await contribute(6, late);
   await contribute(0, late);
 
-  // 4. Past its join deadline, never filled. 2 of 5.
-  const expired = await createCircle(2, 100, 5, 7, 1);
+  // 4. Past its join deadline, never filled. 2 of 5. 1 USDT, weekly.
+  const expired = await createCircle(2, 1, 7, 1);
   await join(2, expired, 1);
   await join(3, expired, 2);
 
   // 5. Completed, with one default before payout and compensation at the end.
-  const completed = await createCircle(4, 50, 5, 1, 3);
+  const completed = await createCircle(4, 1, 1, 3);
   await join(4, completed, 1);
   await join(5, completed, 2);
   await join(6, completed, 3);
@@ -312,7 +308,7 @@ async function main() {
   });
 
   // 6. Cancelled after missing its deadline. One refund left unclaimed.
-  const cancelled = await createCircle(2, 75, 5, 7, 1);
+  const cancelled = await createCircle(2, 1, 3, 1);
   await join(2, cancelled, 1);
   await join(3, cancelled, 2);
   await advance(2 * 86400);
@@ -341,12 +337,12 @@ async function main() {
   fs.writeFileSync(envPath, env);
 
   console.log("\nSeeded:");
-  console.log(`  open 3/5            #${open5}  /pools/${open5}`);
-  console.log(`  open 7/10           #${open10}  /pools/${open10}`);
-  console.log(`  active, late seats  #${late}  /pools/${late}`);
-  console.log(`  deadline passed     #${expired}  /pools/${expired}`);
-  console.log(`  completed + default #${completed}  /pools/${completed}`);
-  console.log(`  cancelled + refund  #${cancelled}  /pools/${cancelled}`);
+  console.log(`  open 3/5, 1 USDT     #${open5}  /pools/${open5}`);
+  console.log(`  open 4/5, 2 USDT     #${openFour}  /pools/${openFour}`);
+  console.log(`  active, late seats   #${late}  /pools/${late}`);
+  console.log(`  deadline passed      #${expired}  /pools/${expired}`);
+  console.log(`  completed + default  #${completed}  /pools/${completed}`);
+  console.log(`  cancelled + refund   #${cancelled}  /pools/${cancelled}`);
   console.log(`\nWrote ${envPath}`);
   console.log("Wallets (anvil):");
   accounts.slice(0, 5).forEach((account, index) => console.log(`  ${index}: ${account.address}`));

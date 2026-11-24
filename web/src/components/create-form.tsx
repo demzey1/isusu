@@ -8,7 +8,7 @@ import { parseEventLogs } from "viem";
 
 import { isusuAbi } from "@/lib/abi";
 import { ISUSU_ADDRESS } from "@/lib/config";
-import { formatDuration, formatUsdt, parseUsdt } from "@/lib/format";
+import { formatDuration, formatUsdt } from "@/lib/format";
 import { useAgentId } from "@/lib/hooks";
 import { useTx } from "@/lib/tx";
 
@@ -18,17 +18,23 @@ import { ArrowRight, Check, Spinner } from "./icons";
 import { UsdtLogo } from "./usdt-logo";
 import { WalletButton } from "./wallet-button";
 
+const SEATS = 5;
+
+const CONTRIBUTIONS = [
+  { amount: 1n, label: "1 USDT", hint: "5 USDT pot each round" },
+  { amount: 2n, label: "2 USDT", hint: "10 USDT pot each round" },
+] as const;
+
 const ROUND_OPTIONS = [
-  { days: 1, label: "Daily", hint: "Fast, needs a payment every day" },
-  { days: 7, label: "Weekly", hint: "The usual rhythm for a circle" },
-  { days: 30, label: "Monthly", hint: "Matches a monthly salary" },
+  { days: 1, label: "Daily", hint: "A payment every day" },
+  { days: 3, label: "Every 3 days", hint: "A steadier rhythm" },
+  { days: 7, label: "Weekly", hint: "The usual circle" },
 ];
 
 const JOIN_OPTIONS = [
   { days: 1, label: "1 day" },
   { days: 3, label: "3 days" },
   { days: 7, label: "7 days" },
-  { days: 14, label: "14 days" },
 ];
 
 export function CreateForm() {
@@ -40,37 +46,27 @@ export function CreateForm() {
   const agent = useAgentId(address);
   const tx = useTx();
 
-  const [slots, setSlots] = useState<5 | 10>(5);
-  const [amount, setAmount] = useState("");
+  const [contribution, setContribution] = useState<bigint>(CONTRIBUTIONS[0].amount);
   const [roundDays, setRoundDays] = useState(7);
   const [joinDays, setJoinDays] = useState(7);
   const [confirming, setConfirming] = useState(false);
   const [creating, setCreating] = useState(false);
 
-  const contribution = parseUsdt(amount);
-  const validAmount = contribution !== null && contribution > 0n;
   const wrongChain = Boolean(address) && chainId !== bsc.id;
 
   const summary = useMemo(() => {
-    if (!contribution || contribution <= 0n) return null;
     return {
-      pot: contribution * BigInt(slots),
-      firstSeat: contribution + contribution * BigInt(slots - 1),
+      pot: contribution * BigInt(SEATS),
+      firstSeat: contribution * BigInt(SEATS),
       lastSeat: contribution,
-      collateral: contribution * BigInt(slots - 1),
+      collateral: contribution * BigInt(SEATS - 1),
     };
-  }, [contribution, slots]);
+  }, [contribution]);
 
   async function create() {
-    if (!contribution || !client) return;
+    if (!client) return;
     setCreating(true);
     try {
-      const block = await client.getBlock();
-      const window = BigInt(joinDays * 86400);
-      // Stay safely inside the contract's 1–14 day window.
-      const buffer = joinDays === 1 ? 600n : joinDays === 14 ? -600n : 0n;
-      const joinDeadline = block.timestamp + window + buffer;
-
       const receipt = await tx.run([
         {
           label: "Open the circle",
@@ -78,7 +74,7 @@ export function CreateForm() {
             address: ISUSU_ADDRESS as `0x${string}`,
             abi: isusuAbi,
             functionName: "createCircle" as const,
-            args: [contribution, slots, BigInt(roundDays * 86400), joinDeadline] as const,
+            args: [contribution, BigInt(roundDays * 86400), BigInt(joinDays * 86400)] as const,
           },
         },
       ]);
@@ -118,54 +114,41 @@ export function CreateForm() {
   return (
     <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
       <div className="rounded-card border border-ink/[0.1] bg-white/55 p-5 shadow-[0_18px_40px_-34px_rgba(20,17,15,0.5)] sm:p-7">
-        <fieldset>
+        <div className="rounded-2xl border border-ink/10 bg-cream/70 px-4 py-3 text-sm leading-relaxed text-ink/60">
+          Every circle has <strong className="text-ink">five people</strong> and five rounds. Pick the
+          amount and the rhythm; the rest is fixed.
+        </div>
+
+        <fieldset className="mt-6">
           <legend className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink/40">
-            1 · How many people
+            1 · Each person pays
           </legend>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            {([5, 10] as const).map((size) => (
+            {CONTRIBUTIONS.map((option) => (
               <button
-                key={size}
+                key={option.amount.toString()}
                 type="button"
-                onClick={() => setSlots(size)}
-                aria-pressed={slots === size}
+                onClick={() => setContribution(option.amount)}
+                aria-pressed={contribution === option.amount}
                 className={`rounded-2xl border px-4 py-4 text-left transition ${
-                  slots === size
+                  contribution === option.amount
                     ? "border-marigold bg-marigold/15 shadow-[0_10px_24px_-20px_rgba(20,17,15,0.7)]"
                     : "border-ink/12 bg-cream hover:border-ink/25"
                 }`}
               >
-                <span className="tnum block font-mono text-2xl text-ink">{size}</span>
-                <span className="mt-0.5 block text-sm text-ink/55">people, {size} rounds</span>
+                <span className="tnum block font-mono text-2xl text-ink">{option.label}</span>
+                <span className="mt-0.5 block text-sm text-ink/55">{option.hint}</span>
               </button>
             ))}
           </div>
-        </fieldset>
-
-        <fieldset className="mt-6">
-          <legend className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink/40">
-            2 · Each person pays
-          </legend>
-          <div className="mt-3 flex items-center gap-2 rounded-2xl border border-ink/15 bg-cream px-4 py-3 focus-within:border-indigo/50">
-            <UsdtLogo size={20} />
-            <input
-              inputMode="decimal"
-              placeholder="100"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              className="tnum w-full bg-transparent font-mono text-2xl text-ink outline-none placeholder:text-ink/25"
-              aria-label="Contribution in USDT per round"
-            />
-            <span className="text-sm text-ink/40">USDT</span>
-          </div>
           <p className="mt-2 text-xs text-ink/40">
-            The same amount every round. Must be more than 0, with up to 18 decimals.
+            USDT on BNB Chain. The pot is five times the contribution, every round.
           </p>
         </fieldset>
 
         <fieldset className="mt-6">
           <legend className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink/40">
-            3 · How often
+            2 · How often
           </legend>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
             {ROUND_OPTIONS.map((option) => (
@@ -189,9 +172,9 @@ export function CreateForm() {
 
         <fieldset className="mt-6">
           <legend className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink/40">
-            4 · Time to fill the circle
+            3 · Time to fill the circle
           </legend>
-          <div className="mt-3 grid grid-cols-4 gap-2">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             {JOIN_OPTIONS.map((option) => (
               <button
                 key={option.days}
@@ -210,7 +193,7 @@ export function CreateForm() {
           </div>
           <p className="mt-2 text-xs leading-relaxed text-ink/40">
             If the circle isn&apos;t full by then, anyone can cancel it and every member takes back
-            everything they put in. The contract allows 1 to 14 days.
+            everything they put in. Choose 1, 3 or 7 days.
           </p>
         </fieldset>
 
@@ -249,7 +232,7 @@ export function CreateForm() {
           ) : (
             <button
               type="button"
-              disabled={!validAmount || tx.busy}
+              disabled={tx.busy}
               onClick={() => {
                 tx.reset();
                 setConfirming(true);
@@ -270,54 +253,45 @@ export function CreateForm() {
           What you&apos;re opening
         </p>
 
-        {summary ? (
-          <>
-            <p className="mt-3 flex items-baseline gap-1.5">
-              <UsdtLogo size={20} />
-              <span className="tnum font-mono text-4xl font-medium leading-none tracking-[-0.03em]">
-                {formatUsdt(summary.pot)}
-              </span>
-            </p>
-            <p className="mt-1 text-sm text-cream/50">the pot, every round</p>
+        <p className="mt-3 flex items-baseline gap-1.5">
+          <UsdtLogo size={20} />
+          <span className="tnum font-mono text-4xl font-medium leading-none tracking-[-0.03em]">
+            {formatUsdt(summary.pot)}
+          </span>
+        </p>
+        <p className="mt-1 text-sm text-cream/50">the pot, every round</p>
 
-            <dl className="mt-6 space-y-3 border-t border-cream/10 pt-5 text-sm">
-              <div className="flex justify-between gap-3">
-                <dt className="text-cream/50">People</dt>
-                <dd className="tnum font-mono text-cream/90">{slots}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-cream/50">Each pays</dt>
-                <dd className="tnum font-mono text-cream/90">{formatUsdt(contribution ?? 0n)} USDT</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-cream/50">Every</dt>
-                <dd className="text-cream/90">{formatDuration(roundDays * 86400)}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-cream/50">Join window</dt>
-                <dd className="text-cream/90">{formatDuration(joinDays * 86400)}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-cream/50">Whole circle runs</dt>
-                <dd className="text-cream/90">{formatDuration(slots * roundDays * 86400)}</dd>
-              </div>
-            </dl>
+        <dl className="mt-6 space-y-3 border-t border-cream/10 pt-5 text-sm">
+          <div className="flex justify-between gap-3">
+            <dt className="text-cream/50">People</dt>
+            <dd className="tnum font-mono text-cream/90">{SEATS}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-cream/50">Each pays</dt>
+            <dd className="tnum font-mono text-cream/90">{formatUsdt(contribution)} USDT</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-cream/50">Every</dt>
+            <dd className="text-cream/90">{formatDuration(roundDays * 86400)}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-cream/50">Join window</dt>
+            <dd className="text-cream/90">{formatDuration(joinDays * 86400)}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-cream/50">Whole circle runs</dt>
+            <dd className="text-cream/90">{formatDuration(SEATS * roundDays * 86400)}</dd>
+          </div>
+        </dl>
 
-            <div className="mt-6 rounded-2xl border border-cream/10 bg-cream/[0.04] p-4 text-xs leading-relaxed text-cream/55">
-              <p className="font-semibold text-cream/80">Seat 1 pays the most up front</p>
-              <p className="mt-1">
-                {formatUsdt(summary.firstSeat)} USDT today and takes the {formatUsdt(summary.pot)} pot
-                first. The last seat pays just {formatUsdt(summary.lastSeat)} USDT and waits{" "}
-                {formatDuration((slots - 1) * roundDays * 86400)}.
-              </p>
-            </div>
-          </>
-        ) : (
-          <p className="mt-4 text-sm leading-relaxed text-cream/50">
-            Enter a contribution to see the pot, the collateral for each seat, and how long the circle
-            runs.
+        <div className="mt-6 rounded-2xl border border-cream/10 bg-cream/[0.04] p-4 text-xs leading-relaxed text-cream/55">
+          <p className="font-semibold text-cream/80">Seat 1 pays the most up front</p>
+          <p className="mt-1">
+            {formatUsdt(summary.firstSeat)} USDT today and takes the {formatUsdt(summary.pot)} pot
+            first. The last seat pays just {formatUsdt(summary.lastSeat)} USDT and waits{" "}
+            {formatDuration((SEATS - 1) * roundDays * 86400)}.
           </p>
-        )}
+        </div>
 
         <ul className="mt-6 space-y-2 border-t border-cream/10 pt-5 text-xs leading-relaxed text-cream/55">
           {[
@@ -344,9 +318,9 @@ export function CreateForm() {
         title="Open this circle?"
         description="This creates the circle on-chain. It does not take any USDT from you."
         rows={[
-          { label: "People", value: `${slots}` },
-          { label: "Each pays", value: `${formatUsdt(contribution ?? 0n)} USDT` },
-          { label: "Pot", value: `${formatUsdt(summary?.pot ?? 0n)} USDT`, strong: true },
+          { label: "People", value: `${SEATS}` },
+          { label: "Each pays", value: `${formatUsdt(contribution)} USDT` },
+          { label: "Pot", value: `${formatUsdt(summary.pot)} USDT`, strong: true },
           { label: "Every", value: formatDuration(roundDays * 86400) },
           { label: "Join closes", value: `In ${formatDuration(joinDays * 86400)}` },
         ]}

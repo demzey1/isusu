@@ -51,7 +51,9 @@ Restart anvil and re-seed to reset every state.
 ## Product rules that are easy to break
 
 - Exact-amount USDT approvals only, never unlimited. Every transaction shows its amounts first.
+- Circles are fixed at five seats, 1 or 2 USDT per round, with 1, 3 or 7 day rounds and join windows.
 - Joining needs an Agent ID; the copy points to Binance app → Wallet → homepage banner → Agent ID.
-- Payouts are automatic. There is no "claim payout" action; only refunds are pulled with `withdraw`.
+- Payouts are automatic. There is no "claim payout" action; only refunds and held payouts use `withdraw`.
+- If a payout transfer fails, the contract holds it as a withdrawable balance for that member.
 - Language stays plain: no "earn", "yield", "profit" or "passive income".
 - The product is Isusu, built on BNB Chain. Never brand it as Binance or BNB.

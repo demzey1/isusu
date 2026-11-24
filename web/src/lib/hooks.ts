@@ -107,6 +107,7 @@ function normalizeMember(raw: MemberView): MemberView {
     credit: raw.credit,
     deposited: raw.deposited,
     received: raw.received,
+    owed: raw.owed,
   };
 }
 
@@ -397,9 +398,11 @@ export function useProfile(address?: Address) {
     received: entries.reduce((sum, entry) => sum + entry.member.received, 0n),
     paidIn: entries.reduce((sum, entry) => sum + entry.member.deposited, 0n),
     // Collateral is locked while a circle is running; only a finished or
-    // cancelled circle leaves a credit the member can actually pull out.
+    // cancelled circle leaves a credit the member can actually pull out. A
+    // deferred payout is withdrawable immediately.
     refundable: entries.reduce(
-      (sum, entry) => (settled(entry) ? sum + entry.member.credit : sum),
+      (sum, entry) =>
+        sum + entry.member.owed + (settled(entry) ? entry.member.credit : 0n),
       0n,
     ),
   };

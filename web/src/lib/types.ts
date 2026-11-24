@@ -25,6 +25,7 @@ export type MemberView = {
   credit: bigint;
   deposited: bigint;
   received: bigint;
+  owed: bigint;
 };
 
 export type Seat = {
