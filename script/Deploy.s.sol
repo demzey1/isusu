@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Script} from "forge-std/Script.sol";
+import {Script, console2} from "forge-std/Script.sol";
 
 import {IAgentId, Isusu} from "../src/Isusu.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -19,5 +19,15 @@ contract Deploy is Script {
         vm.startBroadcast();
         isusu = new Isusu(IERC20(usdt), IAgentId(agentId));
         vm.stopBroadcast();
+
+        require(isusu.SLOTS() == 5, "unexpected seat count");
+        require(isusu.ONE_USDT() == 1e18 && isusu.TWO_USDT() == 2e18, "unexpected contributions");
+
+        console2.log("Isusu deployed at", address(isusu));
+        console2.log("USDT", usdt);
+        console2.log("Agent ID", agentId);
+        console2.log("Seats", isusu.SLOTS());
+        console2.log("Contributions (USDT): 1, 2");
+        console2.log("Rounds and join windows: 1, 3 or 7 days");
     }
 }
