@@ -16,10 +16,12 @@ interface IAgentId {
 ///      Rules
 ///      -----
 ///      - Only an Agent ID holder (balanceOf > 0) may create a circle or join one.
-///      - A circle has `slots` (N) members and pays slot r in round r. It must
-///        fill before its join deadline (1 to 14 days after creation).
+///      - Every circle has exactly five seats and pays slot r in round r. It must
+///        fill before its join deadline, chosen at creation as 1, 3 or 7 days.
+///      - The contribution is exactly 1 or 2 USDT per round, so a pot is 5 or
+///        10 USDT.
 ///      - Joining costs the round-1 contribution plus collateral of
-///        `contribution * (N - slot)`. Collateral is exactly the amount a member
+///        `contribution * (5 - slot)`. Collateral is exactly the amount a member
 ///        still owes after receiving their payout, so it only secures rounds
 ///        after the payout.
 ///      - If the deadline passes and the circle is not full, anyone may call
@@ -35,17 +37,22 @@ interface IAgentId {
 ///        the pot and leaving.
 ///      - At the end the pool first makes every non-defaulting member whole
 ///        against what they paid in, then refunds any surplus pro rata.
+///      - If a payout transfer fails, the pot is credited to that member's
+///        withdrawable balance instead of reverting the settlement.
 ///      - After the final round every member withdraws their remaining credit.
 contract Isusu is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    uint8 public constant MIN_SLOTS = 2;
-    uint8 public constant MAX_SLOTS = 20;
+    /// @notice Every circle has exactly five seats.
+    uint8 public constant SLOTS = 5;
+    /// @notice Allowed contributions: 1 USDT or 2 USDT (18 decimals).
+    uint128 public constant ONE_USDT = 1e18;
+    uint128 public constant TWO_USDT = 2e18;
     uint64 public constant GRACE_PERIOD = 24 hours;
-    uint64 public constant MIN_ROUND_DURATION = 1 hours;
-    uint64 public constant MAX_ROUND_DURATION = 365 days;
-    uint64 public constant MIN_JOIN_WINDOW = 1 days;
-    uint64 public constant MAX_JOIN_WINDOW = 14 days;
+    /// @notice Rounds and join windows are exactly 1, 3 or 7 days.
+    uint64 public constant ONE_DAY = 1 days;
+    uint64 public constant THREE_DAYS = 3 days;
+    uint64 public constant SEVEN_DAYS = 7 days;
 
     IERC20 public immutable usdt;
     IAgentId public immutable agentId;
@@ -58,7 +65,8 @@ contract Isusu is ReentrancyGuard {
         bool paid; // paid for the current round
         uint256 credit; // refundable collateral not yet slashed
         uint256 deposited; // USDT transferred in: join amount plus contributions
-        uint256 received; // pots received
+        uint256 received; // pots transferred to the member
+        uint256 owed; // pot credited after a failed transfer, withdrawable
     }
 
     struct Circle {
@@ -115,12 +123,15 @@ contract Isusu is ReentrancyGuard {
     event Defaulted(uint256 indexed id, address indexed member, uint8 round);
     event Withdrawn(uint256 indexed id, address indexed member, uint256 amount);
     event Cancelled(uint256 indexed id);
+    event PayoutDeferred(uint256 indexed id, uint8 round, address indexed member, uint256 amount);
+    event AvatarSet(address indexed owner, uint8 avatar);
 
     error NotAgentHolder();
     error UnknownCircle();
-    error ZeroContribution();
-    error BadSlotCount();
+    error BadContribution();
     error BadRoundDuration();
+    error BadJoinDeadline();
+    error BadAvatar();
     error CircleFull();
     error CircleFinished();
     error NotStarted();
@@ -132,9 +143,11 @@ contract Isusu is ReentrancyGuard {
     error NotOverdue();
     error NotFinished();
     error NothingToWithdraw();
-    error BadJoinDeadline();
     error JoinClosed();
     error JoinStillOpen();
+
+    /// @notice Chosen avatar for a wallet, 0..15.
+    mapping(address => uint8) private _avatar;
 
     constructor(IERC20 usdt_, IAgentId agentId_) {
         usdt = usdt_;
@@ -145,17 +158,15 @@ contract Isusu is ReentrancyGuard {
     // Circle lifecycle
     // ---------------------------------------------------------------------
 
-    function createCircle(uint128 contribution, uint8 slots, uint64 roundDuration, uint64 joinDeadline)
-        external
-        returns (uint256 id)
-    {
+    /// @notice Open a five-seat circle. `contribution` is 1 or 2 USDT and both
+    ///         `roundDuration` and `joinWindow` are 1, 3 or 7 days.
+    function createCircle(uint128 contribution, uint64 roundDuration, uint64 joinWindow) external returns (uint256 id) {
         if (agentId.balanceOf(msg.sender) == 0) revert NotAgentHolder();
-        if (contribution == 0) revert ZeroContribution();
-        if (slots < MIN_SLOTS || slots > MAX_SLOTS) revert BadSlotCount();
-        if (roundDuration < MIN_ROUND_DURATION || roundDuration > MAX_ROUND_DURATION) revert BadRoundDuration();
-        if (joinDeadline < block.timestamp + MIN_JOIN_WINDOW || joinDeadline > block.timestamp + MAX_JOIN_WINDOW) {
-            revert BadJoinDeadline();
-        }
+        if (contribution != ONE_USDT && contribution != TWO_USDT) revert BadContribution();
+        if (!_allowedPeriod(roundDuration)) revert BadRoundDuration();
+        if (!_allowedPeriod(joinWindow)) revert BadJoinDeadline();
+
+        uint64 joinDeadline = uint64(block.timestamp) + joinWindow;
 
         id = ++circleCount;
         Circle storage c = _circles[id];
@@ -163,9 +174,9 @@ contract Isusu is ReentrancyGuard {
         c.contribution = contribution;
         c.roundDuration = roundDuration;
         c.joinDeadline = joinDeadline;
-        c.slots = slots;
+        c.slots = SLOTS;
 
-        emit CircleCreated(id, msg.sender, contribution, slots, roundDuration, joinDeadline);
+        emit CircleCreated(id, msg.sender, contribution, SLOTS, roundDuration, joinDeadline);
     }
 
     /// @notice Take a payout slot. Pulls the round-1 contribution plus collateral.
@@ -301,17 +312,25 @@ contract Isusu is ReentrancyGuard {
         emit Cancelled(id);
     }
 
-    /// @notice Withdraw refundable collateral (and compensation) after the circle ends.
+    /// @notice Withdraw refundable collateral and any pot credited after a
+    ///         failed payout. A deferred pot is available immediately; ordinary
+    ///         credit unlocks only when the circle ends.
     function withdraw(uint256 id) external nonReentrant {
         Circle storage c = _get(id);
-        if (!c.finished) revert NotFinished();
-
         Member storage m = c.members[msg.sender];
         if (m.slot == 0) revert NotMember();
 
-        uint256 amount = m.credit;
+        uint256 amount = m.owed;
+        m.owed = 0;
+
+        if (c.finished) {
+            amount += m.credit;
+            m.credit = 0;
+        } else if (amount == 0) {
+            revert NotFinished();
+        }
+
         if (amount == 0) revert NothingToWithdraw();
-        m.credit = 0;
 
         usdt.safeTransfer(msg.sender, amount);
         emit Withdrawn(id, msg.sender, amount);
@@ -330,8 +349,16 @@ contract Isusu is ReentrancyGuard {
         c.paidCount = 0;
 
         if (recipient != address(0) && !c.members[recipient].defaulted) {
-            if (pot > 0) usdt.safeTransfer(recipient, pot);
-            c.members[recipient].received += pot;
+            if (pot > 0) {
+                // A failed transfer must not wedge settlement. Keep the pot in
+                // the contract and let the member pull it with `withdraw`.
+                if (_tryTransfer(recipient, pot)) {
+                    c.members[recipient].received += pot;
+                } else {
+                    c.members[recipient].owed += pot;
+                    emit PayoutDeferred(id, r, recipient, pot);
+                }
+            }
             emit RoundSettled(id, r, recipient, pot);
         } else {
             // The slot owner defaulted (or no owner); keep the pot for compensation.
@@ -372,7 +399,7 @@ contract Isusu is ReentrancyGuard {
         for (uint256 i; i < len; ++i) {
             Member storage m = c.members[list[i]];
             if (m.defaulted) continue;
-            uint256 out = m.received + m.credit;
+            uint256 out = m.received + m.credit + m.owed;
             if (m.deposited > out) totalDeficit += m.deposited - out;
         }
 
@@ -382,7 +409,7 @@ contract Isusu is ReentrancyGuard {
             for (uint256 i; i < len; ++i) {
                 Member storage m = c.members[list[i]];
                 if (m.defaulted) continue;
-                uint256 out = m.received + m.credit;
+                uint256 out = m.received + m.credit + m.owed;
                 if (m.deposited <= out) continue;
                 uint256 pay = ((m.deposited - out) * available) / totalDeficit;
                 m.credit += pay;
@@ -419,6 +446,21 @@ contract Isusu is ReentrancyGuard {
         // Integer-division dust goes to the last non-defaulted member so the
         // circle's liabilities match its balance exactly.
         if (pool > refunded) c.members[list[last]].credit += pool - refunded;
+    }
+
+    // ---------------------------------------------------------------------
+    // Avatars
+    // ---------------------------------------------------------------------
+
+    /// @notice Pick one of 16 avatars (0..15) for the caller.
+    function setAvatar(uint8 id) external {
+        if (id > 15) revert BadAvatar();
+        _avatar[msg.sender] = id;
+        emit AvatarSet(msg.sender, id);
+    }
+
+    function avatarOf(address owner) external view returns (uint8) {
+        return _avatar[owner];
     }
 
     // ---------------------------------------------------------------------
@@ -466,7 +508,7 @@ contract Isusu is ReentrancyGuard {
         uint256 obligations = c.pot + c.pool;
         address[] storage list = c.memberList;
         for (uint256 i; i < list.length; ++i) {
-            obligations += c.members[list[i]].credit;
+            obligations += c.members[list[i]].credit + c.members[list[i]].owed;
         }
         return obligations;
     }
@@ -478,5 +520,18 @@ contract Isusu is ReentrancyGuard {
     function _get(uint256 id) private view returns (Circle storage) {
         if (id == 0 || id > circleCount) revert UnknownCircle();
         return _circles[id];
+    }
+
+    function _allowedPeriod(uint64 period) private pure returns (bool) {
+        return period == ONE_DAY || period == THREE_DAYS || period == SEVEN_DAYS;
+    }
+
+    /// @dev USDT returns a bool; a revert or false both mean "not paid".
+    function _tryTransfer(address to, uint256 amount) private returns (bool) {
+        try usdt.transfer(to, amount) returns (bool ok) {
+            return ok;
+        } catch {
+            return false;
+        }
     }
 }
