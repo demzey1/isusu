@@ -6,14 +6,16 @@ circle or take a slot in one. There is no owner and no admin function.
 
 ## Mechanics
 
-A circle has `N` members, each contributing the same `contribution` every round.
+Every circle has exactly **five seats** and five rounds. Members contribute
+either **1 USDT** or **2 USDT** per round, so every pot is exactly 5 or 10 USDT.
 The member in slot `r` receives the pot in round `r`.
 
-- **Create** — `createCircle(contribution, slots, roundDuration, joinDeadline)`; caller
-  must hold an Agent ID (`balanceOf > 0`). 2–20 slots, rounds of 1h–365d, and a
-  join deadline 1–14 days out.
-- **Join** — `join(id, slot)` picks an unused slot 1..N, final on join. Pays the
-  round-1 contribution plus collateral of `contribution * (N - slot)`. Joins
+- **Create** — `createCircle(contribution, roundDuration, joinWindow)`; caller
+  must hold an Agent ID (`balanceOf > 0`). `contribution` is 1 or 2 USDT, and
+  both `roundDuration` and `joinWindow` are exactly 1, 3 or 7 days. The join
+  deadline is set to `block.timestamp + joinWindow`.
+- **Join** — `join(id, slot)` picks an unused slot 1..5, final on join. Pays the
+  round-1 contribution plus collateral of `contribution * (5 - slot)`. Joins
   close at the deadline. The circle starts the moment the last slot fills and
   round 1 pays slot 1.
 - **Not full by the deadline** — anyone may call `cancelCircle(id)`. Nothing is
@@ -29,6 +31,12 @@ The member in slot `r` receives the pot in round `r`.
   forfeited and the remaining collateral joins the pool.
 - **Refunds** — after the final round, or after a cancelled circle, each member
   calls `withdraw(id)` to take back their remaining credit.
+- **Failed payouts** — if the USDT transfer to a recipient fails, the pot is not
+  lost and settlement does not revert. It is credited to that member's
+  `owed` balance, which they can pull with `withdraw(id)` immediately.
+- **Avatars** — any wallet can store a display avatar with `setAvatar(id)`
+  (`0..15`); `avatarOf(address)` reads it. This is presentation only and has no
+  effect on circle funds.
 
 At the end of a completed circle the pool first tops up any non-defaulting member
 whose pots plus collateral are worth less than what they paid in, then splits any
@@ -48,7 +56,10 @@ forge test
 
 `testFuzz_ConservationOfFunds` runs random join/pay/default patterns and asserts
 that no USDT is created or destroyed and that the contract's balance always
-equals its liabilities.
+equals its liabilities. The non-defaulter suite additionally fuzzes default
+clusters and asserts that every member who never defaults finishes with at least
+what they paid in. Failed-payout transfers are covered by freezing a recipient in
+the mock token and checking the deferred balance is withdrawable.
 
 ## Deploy
 
