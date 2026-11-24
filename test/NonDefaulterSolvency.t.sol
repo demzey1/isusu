@@ -17,7 +17,8 @@ contract NonDefaulterSolvencyTest is Test {
     MockUSDT internal usdt;
     MockAgentId internal agent;
 
-    uint256 internal constant C = 100e18;
+    uint256 internal constant C = 1e18;
+    uint8 internal constant N = 5;
     uint64 internal constant DUR = 1 days;
 
     address internal creator;
@@ -30,7 +31,7 @@ contract NonDefaulterSolvencyTest is Test {
         creator = makeAddr("creator");
         agent.setHolder(creator, true);
 
-        for (uint256 i; i < 10; ++i) {
+        for (uint256 i; i < N; ++i) {
             address m = makeAddr(string.concat("member", vm.toString(i)));
             members.push(m);
             agent.setHolder(m, true);
@@ -47,26 +48,26 @@ contract NonDefaulterSolvencyTest is Test {
     /// @dev Bit (i * 8 + r) means "member i pays round r"; r is 2..N because
     ///      round 1 is paid at join. Members who stop paying are slashed from
     ///      collateral and default once it runs out.
-    function _run(uint8 n, uint256 mask) internal returns (uint256 id, uint256[] memory start) {
-        start = new uint256[](n);
-        for (uint256 i; i < n; ++i) {
+    function _run(uint256 mask) internal returns (uint256 id, uint256[] memory start) {
+        start = new uint256[](N);
+        for (uint256 i; i < N; ++i) {
             start[i] = usdt.balanceOf(members[i]);
         }
 
         vm.prank(creator);
-        id = isusu.createCircle(uint128(C), n, DUR, uint64(block.timestamp + 7 days));
+        id = isusu.createCircle(uint128(C), DUR, 7 days);
 
-        for (uint256 i; i < n; ++i) {
+        for (uint256 i; i < N; ++i) {
             vm.prank(members[i]);
             isusu.join(id, uint8(i + 1));
         }
 
-        for (uint256 r = 2; r <= n; ++r) {
+        for (uint256 r = 2; r <= N; ++r) {
             Isusu.CircleView memory c = isusu.getCircle(id);
             if (c.finished) break;
 
             uint256 paid;
-            for (uint256 i; i < n; ++i) {
+            for (uint256 i; i < N; ++i) {
                 if (isusu.getMember(id, members[i]).defaulted) continue;
                 if ((mask >> (i * 8 + r)) & 1 == 0) continue;
                 vm.prank(members[i]);
@@ -82,7 +83,7 @@ contract NonDefaulterSolvencyTest is Test {
             }
         }
 
-        for (uint256 i; i < n; ++i) {
+        for (uint256 i; i < N; ++i) {
             if (isusu.getMember(id, members[i]).credit > 0) {
                 vm.prank(members[i]);
                 isusu.withdraw(id);
@@ -94,14 +95,13 @@ contract NonDefaulterSolvencyTest is Test {
     // Deterministic late-cluster case
     // ------------------------------------------------------------------
 
-    /// N = 6, slots 4, 5 and 6 stop paying from round 2.
+    /// N = 5, slots 4 and 5 stop paying from round 2.
     function test_LateClusterDefaults_AllPayersMadeWhole() public {
-        uint8 n = 6;
-        uint256 mask = _mask(n, 3, 2); // members 0..2 pay every round
+        uint256 mask = _mask(3, 2); // members 0..2 pay every round
 
-        (uint256 id, uint256[] memory start) = _run(n, mask);
+        (uint256 id, uint256[] memory start) = _run(mask);
 
-        for (uint256 i; i < n; ++i) {
+        for (uint256 i; i < N; ++i) {
             if (isusu.getMember(id, members[i]).defaulted) continue;
             assertGe(usdt.balanceOf(members[i]), start[i], string.concat("member ", vm.toString(i), " is short"));
         }
@@ -112,72 +112,59 @@ contract NonDefaulterSolvencyTest is Test {
     // Fuzz
     // ------------------------------------------------------------------
 
-    function testFuzz_NonDefaultersMadeWhole(uint8 n_, uint256 mask) public {
-        uint8 n = uint8(bound(n_, 2, 10));
-
-        (uint256 id, uint256[] memory start) = _run(n, mask);
-
-        _assertNoOneShort(id, start, n);
+    function testFuzz_NonDefaultersMadeWhole(uint256 mask) public {
+        (uint256 id, uint256[] memory start) = _run(mask);
+        _assertNoOneShort(id, start);
     }
 
     /// @dev Defaulters forced into the last D slots, each stopping at a random
     ///      round. This targets the multiple-defaulter, late-cluster case.
-    function testFuzz_LateClusterDefaults(uint8 n_, uint8 d_, uint256 rand) public {
-        uint8 n = uint8(bound(n_, 3, 10));
-        uint8 d = uint8(bound(d_, 1, n - 1));
-        uint8 firstDefaulter = n - d;
+    function testFuzz_LateClusterDefaults(uint8 d_, uint256 rand) public {
+        uint8 d = uint8(bound(d_, 1, N - 1));
+        uint8 firstDefaulter = N - d;
 
         uint256 mask;
-        for (uint256 i; i < n; ++i) {
-            uint8 stop = n + 1;
+        for (uint256 i; i < N; ++i) {
+            uint8 stop = N + 1;
             if (i >= firstDefaulter) {
-                stop = uint8(bound(uint256(keccak256(abi.encode(rand, i))), 2, n));
+                stop = uint8(bound(uint256(keccak256(abi.encode(rand, i))), 2, N));
             }
-            for (uint256 r = 2; r <= n; ++r) {
+            for (uint256 r = 2; r <= N; ++r) {
                 if (r < stop) mask |= uint256(1) << (i * 8 + r);
             }
         }
 
-        (uint256 id, uint256[] memory start) = _run(n, mask);
-        _assertNoOneShort(id, start, n);
+        (uint256 id, uint256[] memory start) = _run(mask);
+        _assertNoOneShort(id, start);
     }
 
-    /// @dev Every combination of N = 3..8, D defaulters in the last slots and a
-    ///      shared stop round.
+    /// @dev Every combination of D defaulters in the last slots and a shared
+    ///      stop round, on the fixed five-seat circle.
     function test_LateClusterMatrix() public {
         uint256 cases;
-        for (uint8 n = 3; n <= 8; ++n) {
-            for (uint8 d = 1; d <= n - 1; ++d) {
-                for (uint8 s = 2; s <= n; ++s) {
-                    uint256 snap = vm.snapshotState();
-                    (uint256 id, uint256[] memory start) = _run(n, _mask(n, n - d, s));
-                    for (uint256 i; i < n; ++i) {
-                        if (isusu.getMember(id, members[i]).defaulted) continue;
-                        assertGe(
-                            usdt.balanceOf(members[i]),
-                            start[i],
-                            string.concat(
-                                "n=",
-                                vm.toString(uint256(n)),
-                                " d=",
-                                vm.toString(uint256(d)),
-                                " s=",
-                                vm.toString(uint256(s)),
-                                " member=",
-                                vm.toString(i)
-                            )
-                        );
-                    }
-                    vm.revertToState(snap);
-                    cases++;
+        for (uint8 d = 1; d <= N - 1; ++d) {
+            for (uint8 s = 2; s <= N; ++s) {
+                uint256 snap = vm.snapshotState();
+                (uint256 id, uint256[] memory start) = _run(_mask(N - d, s));
+                for (uint256 i; i < N; ++i) {
+                    if (isusu.getMember(id, members[i]).defaulted) continue;
+                    assertGe(
+                        usdt.balanceOf(members[i]),
+                        start[i],
+                        string.concat(
+                            "d=", vm.toString(uint256(d)), " s=", vm.toString(uint256(s)), " member=", vm.toString(i)
+                        )
+                    );
                 }
+                vm.revertToState(snap);
+                cases++;
             }
         }
         assertGt(cases, 0);
     }
 
-    function _assertNoOneShort(uint256 id, uint256[] memory start, uint8 n) internal view {
-        for (uint256 i; i < n; ++i) {
+    function _assertNoOneShort(uint256 id, uint256[] memory start) internal view {
+        for (uint256 i; i < N; ++i) {
             if (isusu.getMember(id, members[i]).defaulted) continue;
             uint256 end = usdt.balanceOf(members[i]);
             if (end < start[i]) {
@@ -187,8 +174,6 @@ contract NonDefaulterSolvencyTest is Test {
                         vm.toString(i),
                         " slot=",
                         vm.toString(uint256(isusu.getMember(id, members[i]).slot)),
-                        " n=",
-                        vm.toString(uint256(n)),
                         " paid=",
                         vm.toString(start[i] - end)
                     )
@@ -203,8 +188,8 @@ contract NonDefaulterSolvencyTest is Test {
 
     /// @dev Mask where members [0, payers) pay every round and the rest stop
     ///      from round `stop`, i.e. defaults clustered in the highest slots.
-    function _mask(uint8 n, uint8 payers, uint8 stop) internal pure returns (uint256 mask) {
-        for (uint256 r = 2; r <= n; ++r) {
+    function _mask(uint8 payers, uint8 stop) internal pure returns (uint256 mask) {
+        for (uint256 r = 2; r <= N; ++r) {
             for (uint256 i; i < payers; ++i) {
                 if (r < stop) mask |= uint256(1) << (i * 8 + r);
             }
