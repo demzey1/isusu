@@ -1,0 +1,5 @@
+# Generated screenshots from `npm run shots`
+/screenshots/
+
+# TypeScript incremental build info
+*.tsbuildinfo

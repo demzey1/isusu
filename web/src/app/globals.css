@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #f6efe3;
+  --color-ink: #14110f;
+  --color-indigo: #1f2a6b;
+  --color-marigold: #f2a93b;
+  --color-moss: #3c7a57;
+  --color-clay: #c8553d;
+
+  --breakpoint-xs: 24rem;
+
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
+
+  --radius-card: 1.5rem;
+}
+
+html {
+  background: var(--color-cream);
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-marigold);
+  color: var(--color-ink);
+}
+
+/* Paper grain, laid over the whole page at a whisper. */
+.paper-grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.055;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+.dot-field {
+  background-image: radial-gradient(currentColor 1.1px, transparent 1.1px);
+  background-size: 13px 13px;
+}
+
+.dot-field-fine {
+  background-image: radial-gradient(currentColor 1px, transparent 1px);
+  background-size: 9px 9px;
+}
+
+.dot-dissolve {
+  background-image: radial-gradient(rgba(242, 169, 59, 0.7) 1.2px, transparent 1.5px);
+  background-size: 11px 11px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 28%, black 62%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 28%, black 62%, transparent 100%);
+}
+
+.hero-image {
+  filter: url(#isusu-duotone);
+}
+
+.ring-halo {
+  box-shadow:
+    0 0 0 4px rgba(242, 169, 59, 0.9),
+    0 0 0 10px rgba(242, 169, 59, 0.18);
+}
+
+@keyframes seat-in {
+  from {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+
+.seat-in {
+  animation: seat-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.halo-pulse {
+  animation: soft-pulse 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .seat-in,
+  .halo-pulse {
+    animation: none !important;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keep long addresses from ever forcing horizontal scroll. */
+.break-anywhere {
+  overflow-wrap: anywhere;
+}
