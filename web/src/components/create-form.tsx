@@ -19,10 +19,11 @@ import { UsdtLogo } from "./usdt-logo";
 import { WalletButton } from "./wallet-button";
 
 const SEATS = 5;
+const USDT = 10n ** 18n;
 
 const CONTRIBUTIONS = [
-  { amount: 1n, label: "1 USDT", hint: "5 USDT pot each round" },
-  { amount: 2n, label: "2 USDT", hint: "10 USDT pot each round" },
+  { amount: USDT, label: "1 USDT", hint: "5 USDT pot each round" },
+  { amount: 2n * USDT, label: "2 USDT", hint: "10 USDT pot each round" },
 ] as const;
 
 const ROUND_OPTIONS = [
@@ -324,7 +325,7 @@ export function CreateForm() {
           { label: "Every", value: formatDuration(roundDays * 86400) },
           { label: "Join closes", value: `In ${formatDuration(joinDays * 86400)}` },
         ]}
-        note="Terms are fixed once the circle is created. You will not be able to change the size, contribution, round length or deadline later."
+        note="Terms are fixed once the circle is created. You will not be able to change the contribution, round length or join window later."
         confirmLabel="Create circle"
         pendingLabel={tx.phase === "confirming" ? "Waiting for the network…" : "Confirm in your wallet…"}
         pending={tx.busy || creating}

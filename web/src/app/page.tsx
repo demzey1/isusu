@@ -284,7 +284,7 @@ export default function HomePage() {
                 Money with people you know works better.
               </h2>
               <p className="mt-3 max-w-md text-sm leading-relaxed text-cream/55">
-                Open a circle for five or ten, or take an open seat in one that&apos;s already forming.
+                Open a circle for five, or take an open seat in one that&apos;s already forming.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">

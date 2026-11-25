@@ -5,7 +5,7 @@ import { RiskNote } from "@/components/risk-note";
 
 export const metadata: Metadata = {
   title: "Start a circle — Isusu",
-  description: "Open a five or ten seat rotating savings circle, settled in USDT.",
+  description: "Open a five-seat rotating savings circle, settled in USDT.",
 };
 
 export default function CreatePage() {
@@ -19,8 +19,8 @@ export default function CreatePage() {
           Set the rhythm. Invite your people.
         </h1>
         <p className="mt-3 text-[0.95rem] leading-relaxed text-ink/60">
-          Choose the size, the contribution and how often it&apos;s paid. The terms are fixed once
-          you open it — nobody, including you, can edit them later.
+          Pick the contribution and how often it&apos;s paid. The terms are fixed once you open it -
+          nobody, including you, can edit them later.
         </p>
       </div>
 
