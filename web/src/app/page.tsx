@@ -233,7 +233,7 @@ export default function HomePage() {
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex h-[46%] w-[46%] flex-col items-center justify-center rounded-full bg-cream text-center shadow-[inset_0_0_0_1px_rgba(20,17,15,0.06)]">
                 <span className="text-[0.58rem] uppercase tracking-[0.16em] text-ink/35">Round 3 of 5</span>
-                <span className="tnum mt-1 font-mono text-2xl font-medium text-ink">500</span>
+                <span className="tnum mt-1 font-mono text-2xl font-medium text-ink">10</span>
                 <span className="text-[0.6rem] text-ink/40">USDT pot</span>
               </div>
             </div>
