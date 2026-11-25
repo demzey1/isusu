@@ -63,14 +63,11 @@ function CheckTile({
   value: string;
   state?: "idle" | "ok" | "warn";
 }) {
-  const tone =
-    state === "warn" ? "text-clay" : state === "ok" ? "text-ink" : "text-ink/45";
+  const tone = state === "warn" ? "text-clay" : state === "ok" ? "text-ink" : "text-secondary";
   return (
-    <div className="rounded-xl border border-ink/10 bg-cream px-2.5 py-2">
-      <dt className="text-[0.58rem] font-semibold uppercase tracking-[0.1em] text-ink/40">
-        {label}
-      </dt>
-      <dd className={`tnum mt-0.5 truncate font-mono text-xs ${tone}`} title={value}>
+    <div className="rounded-xl border border-line bg-cream px-3 py-2">
+      <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary">{label}</dt>
+      <dd className={`tnum mt-1 truncate font-mono text-[13px] ${tone}`} title={value}>
         {value}
       </dd>
     </div>
@@ -79,12 +76,13 @@ function CheckTile({
 
 function WalletChecks({ address }: { address: Address }) {
   const { data, isLoading, isError } = useAgenticWalletChecks(address);
+  const gridClass = "grid grid-cols-3 gap-2 sm:max-w-[19rem]";
 
   if (isLoading) {
     return (
-      <dl className="grid grid-cols-3 gap-2 sm:w-[19rem]">
+      <dl className={gridClass}>
         {["Agent ID", "USDT", "Allowance"].map((label) => (
-          <CheckTile key={label} label={label} value="..." />
+          <CheckTile key={label} label={label} value="Checking" />
         ))}
       </dl>
     );
@@ -92,14 +90,14 @@ function WalletChecks({ address }: { address: Address }) {
 
   if (isError || !data) {
     return (
-      <dl className="grid grid-cols-3 gap-2 sm:w-[19rem]">
+      <dl className={gridClass}>
         <CheckTile label="Checks" value="Unavailable" state="warn" />
       </dl>
     );
   }
 
   return (
-    <dl className="grid grid-cols-3 gap-2 sm:w-[19rem]">
+    <dl className={gridClass}>
       <CheckTile
         label="Agent ID"
         value={data.agentIdBalance > 0n ? "Held" : "None"}
@@ -131,12 +129,12 @@ export function AgenticWalletField() {
   }
 
   return (
-    <section className="border-b border-ink/[0.08] bg-white/40" aria-label="Agentic Wallet">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+    <section className="border-b border-line bg-cream" aria-label="Agentic Wallet">
+      <div className="container-shell flex flex-col gap-4 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 flex-1">
           <label
             htmlFor="agentic-wallet-address"
-            className="block text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink/45"
+            className="block text-xs font-semibold uppercase tracking-[0.08em] text-secondary"
           >
             Your Agentic Wallet address
           </label>
@@ -144,18 +142,18 @@ export function AgenticWalletField() {
             id="agentic-wallet-address"
             value={draft}
             onChange={(event) => onChange(event.target.value)}
-            placeholder="0x..."
+            placeholder="Public address"
             autoComplete="off"
             spellCheck={false}
             aria-invalid={invalid}
-            className="mt-1 w-full min-w-0 rounded-xl border border-ink/15 bg-cream px-3 py-2 font-mono text-xs text-ink outline-none transition placeholder:text-ink/25 focus:border-marigold sm:text-sm"
+            className="mt-2 w-full min-w-0 rounded-xl border border-line bg-cream px-3 py-2.5 font-mono text-sm text-ink outline-none transition-colors placeholder:text-secondary focus:border-marigold"
           />
           {invalid ? (
-            <p className="mt-1 text-[0.68rem] text-clay" role="alert">
+            <p className="mt-2 text-[13px] text-clay" role="alert">
               Enter a valid BSC address.
             </p>
           ) : (
-            <p className="mt-1 text-[0.68rem] text-ink/40">
+            <p className="mt-2 text-[13px] text-secondary">
               Public address only. Nothing is connected or signed.
             </p>
           )}
@@ -164,7 +162,7 @@ export function AgenticWalletField() {
         {address ? (
           <WalletChecks address={address} />
         ) : (
-          <p className="text-xs leading-relaxed text-ink/40 sm:w-[19rem]">
+          <p className="text-[13px] leading-relaxed text-secondary lg:max-w-[19rem]">
             Add your address to see the read-only chain checks.
           </p>
         )}

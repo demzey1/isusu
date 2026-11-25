@@ -84,7 +84,7 @@ export default function HomePage() {
               <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/5 to-transparent" />
               <div className="absolute inset-x-4 bottom-4 rounded-2xl border border-cream/10 bg-ink/75 p-4 sm:inset-x-5 sm:bottom-5">
                 <div className="flex items-center gap-2.5">
-                  <LogoMark className="h-7 w-7" />
+                  <LogoMark />
                   <p className="text-sm font-medium text-cream/90">A promise, made visible.</p>
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-cream/50">

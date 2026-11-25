@@ -1,18 +1,18 @@
 import Link from "next/link";
 
 export const btnBase =
-  "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-[0.95rem] font-semibold transition duration-200 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-marigold disabled:pointer-events-none disabled:opacity-45";
+  "inline-flex h-12 items-center justify-center gap-2 rounded-xl px-6 text-[15px] font-semibold transition-colors duration-200 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-marigold disabled:pointer-events-none disabled:opacity-45";
 
-export const btnPrimary = `${btnBase} bg-marigold text-ink shadow-[0_10px_24px_-14px_rgba(20,17,15,0.55)] hover:-translate-y-0.5 hover:brightness-[1.03] active:translate-y-0`;
+export const btnPrimary = `${btnBase} bg-marigold text-ink hover:opacity-90`;
 
-export const btnGhost = `${btnBase} border border-ink/15 bg-cream/70 text-ink hover:border-ink/35 hover:bg-cream`;
+export const btnGhost = `${btnBase} bg-transparent px-2 text-ink underline underline-offset-4 hover:text-secondary`;
 
-export const btnDarkGhost = `${btnBase} border border-cream/20 bg-transparent text-cream hover:border-cream/40 hover:bg-cream/[0.06]`;
+export const btnDarkGhost = `${btnBase} bg-transparent px-2 text-cream underline underline-offset-4 hover:text-marigold`;
 
-export const btnQuiet = `${btnBase} px-3 py-2 text-sm font-medium text-ink/70 hover:text-ink`;
+export const btnQuiet = `${btnBase} bg-transparent px-2 text-secondary underline underline-offset-4 hover:text-ink`;
 
 export const chip =
-  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.72rem] font-medium tracking-wide";
+  "inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em]";
 
 export function ButtonLink({
   href,
@@ -25,8 +25,7 @@ export function ButtonLink({
   variant?: "primary" | "ghost" | "dark";
   className?: string;
 }) {
-  const style =
-    variant === "ghost" ? btnGhost : variant === "dark" ? btnDarkGhost : btnPrimary;
+  const style = variant === "ghost" ? btnGhost : variant === "dark" ? btnDarkGhost : btnPrimary;
   return (
     <Link href={href} className={`${style} ${className}`}>
       {children}
