@@ -26,24 +26,44 @@ Environment (see `.env.example`):
 at 390, 768 and 1280 px to `screenshots/` and fails loudly on horizontal overflow (the app must be
 running; set `BASE_URL`, `SHOT_PATHS`, `SHOT_WIDTHS` or `CHROME_PATH` to override).
 
-## Local fork
+## Local chain
 
-The app talks to a real deployment. For local work, fork BNB Chain with the repo's contract:
+The app talks to a real deployment. There are two local modes.
+
+**Mocks (no upstream RPC):**
 
 ```bash
 # from the repository root
 forge build
-anvil --fork-url https://bsc-rpc.publicnode.com --fork-block-number <pinned> --chain-id 56
+
+# anywhere, in another terminal
+anvil --chain-id 56
+
+# in web/
+npm run local:seed:mock
+```
+
+This deploys `MockUSDT`, `MockAgentId` and a minimal Multicall3 from the forge artifacts (plain
+anvil has none of them), mints 100,000 USDT per account, gives wallets 0–7 an Agent ID, and wraps
+up with the same seed data as the fork mode.
+
+**Fork (real USDT and Agent ID addresses):**
+
+```bash
+# from the repository root
+forge build
+anvil --fork-url $BSC_ARCHIVE_RPC --fork-block-number <pinned> --chain-id 56
 
 # in web/
 npm run local:seed
 ```
 
-`scripts/seed-local.mjs` deploys `out/Isusu.sol/Isusu.json`, funds ten anvil accounts with USDT by
-writing Tether's balance mapping on the fork, installs a storage-backed Agent ID stub at the
-canonical address (wallets 0–7 hold one, 8–9 do not), seeds circles in every state (filling,
-expired, active with late seats, completed with a default, cancelled with an unclaimed refund), and
-writes `.env.local`. It is a fixture only; none of it ships in the app.
+Fork mode needs an archive RPC: it funds accounts by writing Tether's balance mapping and stubs the
+Agent ID `balanceOf` at the canonical address.
+
+Both modes deploy `out/Isusu.sol/Isusu.json`, seed circles in every state (filling, expired, active
+with late seats, completed with a default, cancelled with an unclaimed refund), and write
+`.env.local`. The seed is a fixture only; none of it ships in the app.
 
 The seed moves chain time forward, so countdowns follow chain time rather than the laptop clock.
 Restart anvil and re-seed to reset every state.

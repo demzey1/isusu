@@ -1,17 +1,24 @@
 /**
- * Local BNB Chain fork fixture for the Isusu web app.
+ * Local fixture for the Isusu web app.
  *
- * Deploys the real Isusu contract to a local anvil fork, stubs the Agent ID
- * contract's balanceOf at its real address (storage-only, on the fork), funds
- * test wallets with real USDT by writing its balance mapping, and seeds a few
- * circles in different states.
+ * Two modes:
  *
- * Nothing in this file is used by the app at runtime. The app reads the real
- * contracts over RPC.
+ *   fork (default) — deploys Isusu to a local anvil fork of BNB Chain, stubs
+ *   the Agent ID contract's balanceOf at its real address, and funds test
+ *   wallets by writing the real USDT balance mapping. Needs an archive RPC.
+ *
+ *   mocks (--mocks) — plain anvil, no upstream RPC. Deploys MockUSDT and
+ *   MockAgentId from the forge artifacts, mints balances and grants Agent IDs.
+ *
+ * Both modes seed a few circles in different states and write .env.local.
+ * Nothing in this file is used by the app at runtime.
  *
  * Usage:
- *   anvil --fork-url https://bsc-dataseed.binance.org --chain-id 56
+ *   anvil --fork-url $BSC_ARCHIVE_RPC --chain-id 56        # fork mode
  *   node scripts/seed-local.mjs
+ *
+ *   anvil --chain-id 56                                    # mock mode
+ *   node scripts/seed-local.mjs --mocks
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -35,9 +42,14 @@ import { bsc } from "viem/chains";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RPC_URL = process.env.RPC_URL ?? "http://127.0.0.1:8545";
-const USDT = getAddress(process.env.USDT_ADDRESS ?? "0x55d398326f99059ff775485246999027b3197955");
-const AGENT_ID = getAddress(process.env.AGENT_ID_ADDRESS ?? "0x60b9262456de011f7d15a54cdd8c48baaa8b022f");
+const USE_MOCKS = process.argv.includes("--mocks") || process.env.USE_MOCKS === "1";
+let USDT = getAddress(process.env.USDT_ADDRESS ?? "0x55d398326f99059ff775485246999027b3197955");
+let AGENT_ID = getAddress(process.env.AGENT_ID_ADDRESS ?? "0x60b9262456de011f7d15a54cdd8c48baaa8b022f");
 const ARTIFACT = path.join(HERE, "..", "..", "out", "Isusu.sol", "Isusu.json");
+const MOCK_USDT_ARTIFACT = path.join(HERE, "..", "..", "out", "MockUSDT.sol", "MockUSDT.json");
+const MOCK_AGENT_ARTIFACT = path.join(HERE, "..", "..", "out", "MockAgentId.sol", "MockAgentId.json");
+const MULTICALL3_ARTIFACT = path.join(HERE, "..", "..", "out", "Multicall3Stub.sol", "Multicall3Stub.json");
+const MULTICALL3 = getAddress("0xcA11bde05977b3631167028862bE2a173976CA11");
 const START_BALANCE = parseUnits("100000", 18);
 
 const transport = http(RPC_URL);
@@ -154,10 +166,58 @@ async function advance(seconds) {
   await testClient.mine({ blocks: 1 });
 }
 
-async function main() {
-  const chainId = await publicClient.getChainId();
-  if (chainId !== 56) throw new Error(`Expected chain 56, got ${chainId}. Is anvil forking BSC?`);
+async function deployMocks() {
+  for (const file of [MOCK_USDT_ARTIFACT, MOCK_AGENT_ARTIFACT, MULTICALL3_ARTIFACT]) {
+    if (!fs.existsSync(file)) throw new Error(`Missing ${file}. Run "forge build" in the repo root first.`);
+  }
+  const mockUsdt = JSON.parse(fs.readFileSync(MOCK_USDT_ARTIFACT, "utf8"));
+  const mockAgent = JSON.parse(fs.readFileSync(MOCK_AGENT_ARTIFACT, "utf8"));
+  const multicall = JSON.parse(fs.readFileSync(MULTICALL3_ARTIFACT, "utf8"));
 
+  // The app batches reads through Multicall3 at its canonical address.
+  await testClient.setCode({ address: MULTICALL3, bytecode: multicall.deployedBytecode.object });
+
+  console.log("Deploying mock USDT and Agent ID…");
+
+  let hash = await wallets[0].deployContract({
+    abi: mockUsdt.abi,
+    bytecode: mockUsdt.bytecode.object,
+    args: [],
+  });
+  let receipt = await publicClient.waitForTransactionReceipt({ hash });
+  USDT = receipt.contractAddress;
+
+  hash = await wallets[0].deployContract({
+    abi: mockAgent.abi,
+    bytecode: mockAgent.bytecode.object,
+    args: [],
+  });
+  receipt = await publicClient.waitForTransactionReceipt({ hash });
+  AGENT_ID = receipt.contractAddress;
+
+  for (let index = 0; index < accounts.length; index += 1) {
+    const account = accounts[index].address;
+    await send(wallets[0], {
+      address: USDT,
+      abi: mockUsdt.abi,
+      functionName: "mint",
+      args: [account, START_BALANCE],
+    });
+    // Accounts 8 and 9 are the "no Agent ID" demo.
+    await send(wallets[0], {
+      address: AGENT_ID,
+      abi: mockAgent.abi,
+      functionName: "setHolder",
+      args: [account, index < 8],
+    });
+  }
+
+  console.log(`  MockUSDT at ${USDT} (100,000 each)`);
+  console.log(`  MockAgentId at ${AGENT_ID} (accounts 0-7 hold one)`);
+  console.log(`  Multicall3 at ${MULTICALL3}`);
+}
+
+async function fundFromFork() {
   console.log("Funding wallets with USDT on the fork…");
   // Find the balances mapping slot by writing a marker for a probe address.
   const probe = accounts[7].address;
@@ -227,6 +287,17 @@ async function main() {
       encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [account.address, 0n]),
     );
     await testClient.setStorageAt({ address: AGENT_ID, index: key, value: padHex("0x0", { size: 32 }) });
+  }
+}
+
+async function main() {
+  const chainId = await publicClient.getChainId();
+  if (chainId !== 56) throw new Error(`Expected chain 56, got ${chainId}. Start anvil with --chain-id 56.`);
+
+  if (USE_MOCKS) {
+    await deployMocks();
+  } else {
+    await fundFromFork();
   }
 
   if (!isusu) {

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "shots": "node scripts/shots.mjs",
-    "local:seed": "node scripts/seed-local.mjs"
+    "local:seed": "node scripts/seed-local.mjs",
+    "local:seed:mock": "node scripts/seed-local.mjs --mocks"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.108.2",
