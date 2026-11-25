@@ -3,11 +3,11 @@
  *
  * Two modes:
  *
- *   fork (default) — deploys Isusu to a local anvil fork of BNB Chain, stubs
+ *   fork (default): deploys Isusu to a local anvil fork of BNB Chain, stubs
  *   the Agent ID contract's balanceOf at its real address, and funds test
  *   wallets by writing the real USDT balance mapping. Needs an archive RPC.
  *
- *   mocks (--mocks) — plain anvil, no upstream RPC. Deploys MockUSDT and
+ *   mocks (--mocks): plain anvil, no upstream RPC. Deploys MockUSDT and
  *   MockAgentId from the forge artifacts, mints balances and grants Agent IDs.
  *
  * Both modes seed a few circles in different states and write .env.local.

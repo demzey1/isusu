@@ -31,7 +31,7 @@ set `BASE_URL`, `SHOT_PATHS`, `SHOT_WIDTHS` or `CHROME_PATH` to override).
 
 ## Agent actions
 
-There are no Connect wallet buttons. Instead, each action exposes a copyable request: join,
+There are no wallet connection buttons. Each action exposes a copyable request: join,
 contribute, create and withdraw. Paste it into your agent, which previews each step, shows the
 amounts and waits for confirmation. This needs Developer Mode on in the Binance App.
 
