@@ -1,28 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useAccount } from "wagmi";
 import type { Address } from "viem";
 
-import { ArrowRight, ArrowUpRight, Check } from "@/components/icons";
-import { RiskNote } from "@/components/risk-note";
-import { formatUsdt, shortAddress } from "@/lib/format";
+import { ArrowRight, ArrowUpRight } from "@/components/icons";
+import { formatUsdt } from "@/lib/format";
 import { useNow, useProfile } from "@/lib/hooks";
 import { circleStatus, STATUS_LABEL, type CircleStatus } from "@/lib/types";
 
 const CHIP: Record<CircleStatus, string> = {
-  open: "border-indigo/20 bg-indigo/[0.07] text-indigo",
-  active: "border-moss/25 bg-moss/[0.09] text-moss",
+  open: "border-marigold/50 bg-marigold/20 text-ink",
+  active: "border-ink/20 bg-ink/[0.06] text-ink/70",
   finished: "border-ink/15 bg-ink/[0.05] text-ink/55",
   cancelled: "border-clay/25 bg-clay/[0.08] text-clay",
   expired: "border-clay/25 bg-clay/[0.08] text-clay",
 };
 
 export function ProfileView({ address }: { address: Address }) {
-  const { address: connected } = useAccount();
   const now = useNow();
   const { entries, stats, isLoading, isError } = useProfile(address);
-  const isYou = connected?.toLowerCase() === address.toLowerCase();
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
@@ -35,25 +31,20 @@ export function ProfileView({ address }: { address: Address }) {
 
       <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-indigo/70">
-            The on-chain record
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-ink/45">
+            On-chain record
           </p>
           <h1 className="mt-2 font-display text-[clamp(2.1rem,4.5vw,3.3rem)] font-semibold leading-[1.0] tracking-[-0.04em]">
-            {isYou ? "Your circle history" : "Circle history"}
+            Circle history
           </h1>
           <p className="mt-2 break-anywhere font-mono text-xs text-ink/45">{address}</p>
         </div>
-        {isYou && (
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-moss/[0.09] px-3 py-1.5 text-xs font-medium text-moss">
-            <Check className="h-3.5 w-3.5" /> This is your wallet
-          </span>
-        )}
       </div>
 
       <dl className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { label: "Circles joined", value: String(stats.circles), tone: "text-ink" },
-          { label: "Completed", value: String(stats.completed), tone: "text-moss" },
+          { label: "Completed", value: String(stats.completed), tone: "text-ink" },
           { label: "Defaults", value: String(stats.defaults), tone: stats.defaults ? "text-clay" : "text-ink" },
           { label: "Pots received", value: `${formatUsdt(stats.received)}`, tone: "text-ink" },
         ].map((stat) => (
@@ -65,20 +56,19 @@ export function ProfileView({ address }: { address: Address }) {
       </dl>
 
       {stats.refundable > 0n && (
-        <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-moss/25 bg-moss/[0.07] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-marigold/40 bg-marigold/[0.12] p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-medium text-moss">Ready to withdraw</p>
-            <p className="tnum mt-0.5 font-mono text-xl text-moss">{formatUsdt(stats.refundable)} USDT</p>
+            <p className="text-sm font-medium text-ink">Ready to withdraw</p>
+            <p className="tnum mt-0.5 font-mono text-xl text-ink">{formatUsdt(stats.refundable)} USDT</p>
           </div>
-          <p className="text-xs leading-relaxed text-moss/80">
-            Open the circle below and use the withdraw button. Refunds are always pulled by you, never
-            pushed.
+          <p className="text-xs leading-relaxed text-ink/60">
+            Open the circle below and copy the withdraw request. Money is always pulled by you.
           </p>
         </div>
       )}
 
       <div className="mt-8 flex items-end justify-between gap-3">
-        <h2 className="font-display text-2xl font-semibold tracking-[-0.02em]">Your seats</h2>
+        <h2 className="font-display text-2xl font-semibold tracking-[-0.02em]">Seats</h2>
         <p className="text-xs text-ink/35">Newest first</p>
       </div>
 
@@ -90,15 +80,14 @@ export function ProfileView({ address }: { address: Address }) {
         </div>
       ) : isError ? (
         <div className="mt-4 rounded-2xl border border-clay/30 bg-clay/[0.06] p-5 text-sm text-ink/65">
-          Couldn&apos;t read the contract right now. Check the RPC and try again.
+          Could not read the contract right now. Check the RPC and try again.
         </div>
       ) : entries.length === 0 ? (
         <div className="dot-field-fine mt-4 rounded-card border border-dashed border-ink/15 bg-white/30 px-6 py-14 text-center">
           <div className="mx-auto max-w-sm text-ink">
             <p className="font-display text-xl font-semibold">No seats in this record.</p>
             <p className="mt-2 text-sm leading-relaxed text-ink/55">
-              This wallet hasn&apos;t joined a circle on this contract yet. Browse open circles to take
-              a seat.
+              This wallet has not joined a circle on this contract yet.
             </p>
             <Link
               href="/pools"
@@ -111,10 +100,7 @@ export function ProfileView({ address }: { address: Address }) {
       ) : (
         <ol className="mt-4 space-y-3">
           {entries.map((entry) => {
-            const status = circleStatus(
-              entry.view,
-              now || Math.floor(Date.now() / 1000),
-            );
+            const status = circleStatus(entry.view, now || Math.floor(Date.now() / 1000));
             const net = entry.member.received - entry.member.deposited;
             const settled = status === "finished" || status === "cancelled";
             const showCredit = settled && entry.member.credit > 0n;
@@ -130,9 +116,9 @@ export function ProfileView({ address }: { address: Address }) {
                       className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-mono text-sm ${
                         entry.member.defaulted
                           ? "border border-clay/40 bg-clay/15 text-clay"
-                          : status === "finished"
-                            ? "bg-moss text-cream"
-                            : "bg-ink text-cream"
+                          : entry.member.paid
+                            ? "bg-ink text-cream"
+                            : "border border-ink/20 bg-cream text-ink/60"
                       }`}
                     >
                       {entry.member.slot}
@@ -167,7 +153,7 @@ export function ProfileView({ address }: { address: Address }) {
                         {formatUsdt(entry.member.deposited)} / {formatUsdt(entry.member.received)}
                       </p>
                       {showCredit && (
-                        <p className="tnum mt-0.5 font-mono text-[0.68rem] text-moss">
+                        <p className="tnum mt-0.5 font-mono text-[0.68rem] text-marigold">
                           {formatUsdt(entry.member.credit)} to withdraw
                         </p>
                       )}
@@ -186,10 +172,6 @@ export function ProfileView({ address }: { address: Address }) {
           })}
         </ol>
       )}
-
-      <div className="mt-10">
-        <RiskNote compact />
-      </div>
     </div>
   );
 }

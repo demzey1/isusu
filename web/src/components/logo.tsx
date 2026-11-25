@@ -14,10 +14,10 @@ export function LogoMark({ className = "h-8 w-8" }: { className?: string }) {
           cx={seat.cx}
           cy={seat.cy}
           r={i === 0 ? 3.1 : 2.4}
-          fill={i === 0 ? "var(--color-marigold)" : "var(--color-indigo)"}
+          fill={i === 0 ? "var(--color-marigold)" : "var(--color-ink)"}
         />
       ))}
-      <circle cx="16" cy="16" r="3.2" fill="none" stroke="var(--color-indigo)" strokeWidth="1.6" />
+      <circle cx="16" cy="16" r="3.2" fill="none" stroke="var(--color-ink)" strokeWidth="1.6" />
     </svg>
   );
 }

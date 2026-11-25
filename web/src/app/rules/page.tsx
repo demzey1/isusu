@@ -1,214 +1,177 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { ArrowUpRight, Check } from "@/components/icons";
-import { RiskNote } from "@/components/risk-note";
+import { ArrowUpRight } from "@/components/icons";
 import { ISUSU_ADDRESS, isConfigured } from "@/lib/config";
 
 export const metadata: Metadata = {
-  title: "The rules — Isusu",
+  title: "The rules | Isusu",
   description:
-    "How an Isusu circle works, in plain language: seats, collateral, payouts, defaults and refunds.",
+    "How an Isusu circle works: seats, collateral, payouts, defaults and refunds.",
 };
 
-const SEAT_EXAMPLE = [
-  { seat: 1, collateral: 4, total: 5, wait: "First pot" },
-  { seat: 2, collateral: 3, total: 4, wait: "1 round" },
-  { seat: 3, collateral: 2, total: 3, wait: "2 rounds" },
-  { seat: 4, collateral: 1, total: 2, wait: "3 rounds" },
-  { seat: 5, collateral: 0, total: 1, wait: "4 rounds" },
-];
+const CONTRIBUTIONS = [1, 2] as const;
+const SEATS = 5;
+
+function tiers(contribution: number) {
+  return Array.from({ length: SEATS }, (_, index) => {
+    const seat = index + 1;
+    const collateral = contribution * (SEATS - seat);
+    return {
+      seat,
+      collateral,
+      due: contribution + collateral,
+      round: seat,
+    };
+  });
+}
 
 export default function RulesPage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
       <div className="grid gap-10 lg:grid-cols-[1fr_20rem] lg:items-start lg:gap-14">
         <article>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-indigo/70">
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-ink/45">
             The rules
           </p>
           <h1 className="mt-2 max-w-2xl font-display text-[clamp(2.3rem,5.5vw,4rem)] font-semibold leading-[0.98] tracking-[-0.045em]">
             The rules are code. Here they are in words.
           </h1>
           <p className="mt-4 max-w-2xl text-[1rem] leading-relaxed text-ink/60">
-            Isusu is a rotating savings circle. A fixed group pays the same amount every round, and each
-            member takes the whole pot once, in the order set by the seat they chose. Nobody holds the
-            money in between: the contract does, and it only does what is written here.
+            A fixed group pays the same amount every round. Each member takes the whole pot once, in
+            seat order. The contract holds the money and only does what is written here.
           </p>
 
-          <Section n="01" title="A circle has seats and rounds">
+          <Section n="01" title="Five seats, five rounds">
             <p>
-              A circle has <strong>five seats</strong>. Every member pays the same{" "}
-              <strong>contribution</strong> every round: either <strong>1 USDT</strong> or{" "}
-              <strong>2 USDT</strong>. That makes every pot exactly 5 or 10 USDT.
+              Every circle has <strong>five seats</strong>. Each member pays <strong>1 or 2 USDT</strong>{" "}
+              per round, so every pot is exactly <strong>5 or 10 USDT</strong>. A round lasts 1, 3 or 7
+              days, and the circle must fill within 1, 3 or 7 days of opening.
             </p>
             <p>
-              A round lasts 1, 3 or 7 days, and the circle must fill within 1, 3 or 7 days of being
-              created. Those choices are fixed at creation.
-            </p>
-            <p>
-              Seat 1 is paid in round 1, seat 2 in round 2, and so on. The circle starts the moment the
-              last seat is taken, and round 1 pays out immediately.
+              Seat 1 is paid in round 1, seat 2 in round 2, and so on. The circle starts when the
+              last seat is taken. Those terms are fixed at creation.
             </p>
           </Section>
 
           <Section n="02" title="Joining costs round 1 plus collateral">
             <p>
-              Your seat decides how much you put in today. You pay the round-1 contribution plus{" "}
-              <strong>collateral = contribution × (seats − your seat)</strong>. That collateral is exactly
-              the payments you still owe after your payout, so it only secures the rounds that come after
-              you have been paid. If you take the last seat, the collateral is zero.
+              You pay the round-1 contribution plus{" "}
+              <strong>collateral = contribution × (5 − your seat)</strong>. Collateral covers the
+              payments you still owe after your payout. Seat 5 pays none.
             </p>
 
-            <div className="mt-4 overflow-hidden rounded-2xl border border-ink/10">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-ink/[0.04] text-[0.62rem] uppercase tracking-[0.1em] text-ink/40">
-                  <tr>
-                    <th className="px-3 py-2.5 font-semibold sm:px-4">Seat</th>
-                    <th className="px-3 py-2.5 font-semibold sm:px-4">Collateral</th>
-                    <th className="px-3 py-2.5 font-semibold sm:px-4">Due today</th>
-                    <th className="px-3 py-2.5 font-semibold sm:px-4">Payout</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink/[0.07]">
-                  {SEAT_EXAMPLE.map((row) => (
-                    <tr key={row.seat}>
-                      <td className="px-3 py-2.5 font-mono text-xs text-ink/70 sm:px-4">{row.seat}</td>
-                      <td className="tnum px-3 py-2.5 font-mono text-xs text-ink/70 sm:px-4">
-                        {row.collateral} USDT
-                      </td>
-                      <td className="tnum px-3 py-2.5 font-mono text-xs text-ink sm:px-4">
-                        {row.total} USDT
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-ink/50 sm:px-4">
-                        5 USDT · {row.wait}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {CONTRIBUTIONS.map((contribution) => (
+                <div key={contribution}>
+                  <p className="mb-2 text-xs uppercase tracking-[0.12em] text-ink/40">
+                    {contribution} USDT each · {contribution * SEATS} USDT pot
+                  </p>
+                  <div className="overflow-hidden rounded-xl border border-ink/10">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-ink/[0.04] text-[0.58rem] uppercase tracking-[0.08em] text-ink/40">
+                        <tr>
+                          <th className="px-2.5 py-2 font-semibold">Seat</th>
+                          <th className="px-2.5 py-2 font-semibold">Collateral</th>
+                          <th className="px-2.5 py-2 font-semibold">Due today</th>
+                          <th className="px-2.5 py-2 font-semibold">Pot in round</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-ink/[0.07]">
+                        {tiers(contribution).map((row) => (
+                          <tr key={row.seat}>
+                            <td className="tnum px-2.5 py-2 font-mono text-ink/70">{row.seat}</td>
+                            <td className="tnum px-2.5 py-2 font-mono text-ink/70">{row.collateral}</td>
+                            <td className="tnum px-2.5 py-2 font-mono text-ink">{row.due}</td>
+                            <td className="tnum px-2.5 py-2 font-mono text-ink/50">{row.round}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
             </div>
             <p className="mt-2 text-xs text-ink/40">
-              Example: a five-seat circle with a 1 USDT contribution. Your actual amounts are always
-              shown before you sign anything.
+              Amounts in USDT. Approvals are always for the exact amount of the action.
             </p>
           </Section>
 
           <Section n="03" title="Everyone pays every round">
             <p>
-              Round 1 is paid when you join, so the first pot is never short. After that, every active
-              member pays the contribution each round. When every active member has paid, the contract
-              sends the whole pot to that round&apos;s seat in the same transaction. There is no claim
-              button: <strong>payouts are automatic</strong>.
+              Round 1 is paid when you join. After that, every active member pays each round. When
+              all active members have paid, the contract sends the whole pot to that round&apos;s seat
+              in the same transaction. There is no claim step.
             </p>
             <p>
-              Once you have received your pot you keep paying the remaining rounds. Your collateral is
-              there to cover you if you stop.
+              After your payout you keep paying the remaining rounds. Your collateral covers you if
+              you stop.
             </p>
           </Section>
 
-          <Section n="04" title="Miss a round before your payout and you lose the seat">
+          <Section n="04" title="Miss a round before your payout, lose the seat">
             <p>
-              Collateral is not a payment method before your payout. If you miss a round while you are
-              still waiting for the pot, the round can be settled after a <strong>24-hour grace</strong>:
-              you lose that seat and your remaining collateral goes to the compensation pool. This stops
-              someone from spending their security, collecting the pot and walking away.
+              If you miss a round while still waiting for the pot, the round can be settled after a{" "}
+              <strong>24-hour grace</strong>. You lose that seat and your remaining collateral goes to
+              the compensation pool.
             </p>
             <p>
-              If you miss a round <em>after</em> your payout, the contribution is charged from your
-              collateral instead. If the collateral runs out, the seat defaults and you lose it.
+              If you miss a round after your payout, the contribution is charged from your collateral.
+              If it runs out, the seat defaults.
             </p>
             <p className="rounded-xl border border-clay/25 bg-clay/[0.06] p-3 text-clay">
-              A missed round is not free. Before your payout it costs you the seat and all remaining
+              A missed round is not free. Before your payout it costs the seat and all remaining
               collateral.
             </p>
           </Section>
 
-          <Section n="05" title="A default doesn't stop the circle">
+          <Section n="05" title="A default does not stop the circle">
             <p>
-              If someone defaults, the circle still pays every remaining seat. The pot is kept whole from
-              the withheld collateral and the pool. At the end, the pool first tops up any member who
-              received less than they paid in, then shares any surplus by how much each member paid.
-            </p>
-            <p>
-              <strong>Top-ups can arrive at the end of the circle, not instantly.</strong> That is the
-              trade-off: the circle keeps moving, but making someone whole may take until the final round.
+              The circle still pays every remaining seat. At the end, the pool first tops up any
+              member who received less than they paid in, then shares any surplus by how much each
+              member paid. Top-ups can arrive at the end, not instantly.
             </p>
           </Section>
 
           <Section n="06" title="Not full by the deadline means a full refund">
             <p>
-              Every circle sets a join window when it is created — 1, 3 or 7 days. No one can join
-              after it. If the circle isn&apos;t full by then, <strong>anyone can cancel it</strong>.
-            </p>
-            <p>
-              Cancelling doesn&apos;t push money around. Each member then calls withdraw and pulls back
-              their full round-1 payment plus full collateral, exactly what they put in. A cancelled
-              circle never pays a pot.
+              No one can join after the join window. If the circle is not full by then,{" "}
+              <strong>anyone can cancel it</strong>. Each member then withdraws their round-1 payment
+              plus all collateral. A cancelled circle never pays a pot.
             </p>
           </Section>
 
-          <Section n="07" title="Seats are final once the circle fills">
+          <Section n="07" title="No admin can touch the money">
             <p>
-              You choose your seat when you join. Seats are unique and cannot be swapped, sold or left
-              after the circle starts. There are no exits and no early refunds. Pick people you trust and
-              an amount you can leave for the whole circle.
-            </p>
-          </Section>
-
-          <Section n="08" title="No admin can touch the money">
-            <p>
-              The contract has no owner, no pause, no upgrade switch and no withdrawal function for
-              anyone. It has no way to move funds except through the rules above. The only way money
-              leaves is a pot payout or a member&apos;s own withdrawal.
+              The contract has no owner, no pause and no upgrade switch. Money leaves only as a pot
+              payout or a member&apos;s own withdrawal. Seats cannot be swapped or sold once the
+              circle starts.
             </p>
             <p>
-              Creating or joining requires an Agent ID in the connected wallet. Nothing else about you is
+              Creating or joining needs an Agent ID in the wallet you use. Nothing else about you is
               checked.
             </p>
           </Section>
-
-          <Section n="09" title="What Isusu will never ask for">
-            <ul className="space-y-2">
-              {[
-                "Your seed phrase.",
-                "Your private key.",
-                "A wallet pairing code.",
-                "An unlimited USDT approval. Approvals are always for the exact amount of that action.",
-              ].map((item) => (
-                <li key={item} className="flex gap-2.5">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-moss" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </Section>
-
-          <div className="mt-8">
-            <RiskNote />
-          </div>
         </article>
 
         <aside className="rounded-card border border-ink/[0.1] bg-ink p-5 text-cream sm:p-6 lg:sticky lg:top-24">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-cream/40">
-            The short version
+            Fixed terms
           </p>
-          <ul className="mt-4 space-y-3 text-sm leading-relaxed text-cream/70">
+          <dl className="mt-4 space-y-2.5 text-sm">
             {[
-              "Everyone pays the same, every round.",
-              "Each seat takes the pot once, in order.",
-              "Seat 1 pays the most, waits the least.",
-              "Miss before your payout: seat and collateral gone.",
-              "Payouts are automatic.",
-              "Not full by the deadline: full refunds.",
-              "No admin can touch the money.",
-            ].map((item) => (
-              <li key={item} className="flex gap-2.5">
-                <span className="mt-[0.5rem] h-1.5 w-1.5 shrink-0 rounded-full bg-marigold" />
-                {item}
-              </li>
+              ["Seats", "5"],
+              ["Each round", "1 or 2 USDT"],
+              ["Pot", "5 or 10 USDT"],
+              ["Round length", "1, 3 or 7 days"],
+              ["Join window", "1, 3 or 7 days"],
+            ].map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-3">
+                <dt className="text-cream/45">{label}</dt>
+                <dd className="tnum font-mono text-cream/85">{value}</dd>
+              </div>
             ))}
-          </ul>
+          </dl>
 
           <div className="mt-6 border-t border-cream/10 pt-5">
             <p className="text-xs text-cream/40">Read it yourself</p>
@@ -224,10 +187,6 @@ export default function RulesPage() {
             ) : (
               <p className="mt-1 text-xs text-cream/40">No contract configured in this build.</p>
             )}
-            <p className="mt-2 text-[0.68rem] leading-relaxed text-cream/35">
-              Built on BNB Chain. Settled in USDT. This is not a deposit, a security or an investment
-              product.
-            </p>
           </div>
 
           <Link
@@ -257,7 +216,7 @@ function Section({
         <span className="tnum font-mono text-xs text-ink/30">{n}</span>
         <h2 className="font-display text-2xl font-semibold tracking-[-0.02em] sm:text-[1.65rem]">{title}</h2>
       </div>
-      <div className="mt-3 space-y-3 pl-0 text-[0.95rem] leading-relaxed text-ink/65 sm:pl-8">{children}</div>
+      <div className="mt-3 space-y-3 text-[0.95rem] leading-relaxed text-ink/65 sm:pl-8">{children}</div>
     </section>
   );
 }

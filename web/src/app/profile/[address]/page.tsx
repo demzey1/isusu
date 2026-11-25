@@ -5,7 +5,7 @@ import { isAddress } from "viem";
 import { ProfileView } from "@/components/profile-view";
 
 export const metadata: Metadata = {
-  title: "Circle record — Isusu",
+  title: "Circle record | Isusu",
   description: "Every seat this wallet has taken, read straight from the contract.",
 };
 

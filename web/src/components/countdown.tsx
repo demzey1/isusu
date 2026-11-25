@@ -13,7 +13,7 @@ export function Countdown({
   doneLabel?: string;
   className?: string;
 }) {
-  if (!now) return <span className={`tnum font-mono ${className}`}>—</span>;
+  if (!now) return <span className={`tnum font-mono ${className}`}>-</span>;
   const at = Number(target);
   return (
     <span className={`tnum font-mono ${className}`}>
@@ -32,7 +32,7 @@ export function CountdownBlocks({
   doneLabel?: string;
 }) {
   if (!now) {
-    return <p className="font-mono text-sm text-ink/40">—</p>;
+    return <p className="font-mono text-sm text-ink/40">-</p>;
   }
   const at = Number(target);
   const { diff, days, hours, minutes, seconds, done } = countdown(at, now);

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BnbLogo } from "./bnb-logo";
 import { LogoMark } from "./logo";
 import { RiskStrip } from "./risk-note";
 
@@ -14,14 +15,19 @@ export function SiteFooter() {
               <span className="font-display text-2xl font-semibold tracking-[-0.03em]">Isusu</span>
             </div>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-cream/60">
-              A rotating savings circle, written in code. Everyone pays the same, everyone takes the
-              pot once, and nobody can change the terms.
+              A savings circle in code. Everyone pays the same, everyone takes the pot once, and the
+              terms cannot change.
             </p>
-            <p className="mt-4 text-xs text-cream/40">Built on BNB Chain. Settled in USDT.</p>
+            <p className="mt-4 flex items-center gap-2 text-xs text-cream/45">
+              <BnbLogo size={14} />
+              Built on BNB Chain. Settled in USDT.
+            </p>
           </div>
 
           <nav className="text-sm" aria-label="Footer">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-cream/35">Explore</p>
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-cream/35">
+              Explore
+            </p>
             <ul className="mt-3 space-y-2.5">
               {[
                 { href: "/pools", label: "Browse circles" },
@@ -42,11 +48,11 @@ export function SiteFooter() {
               No admin
             </p>
             <p className="mt-3 text-sm leading-relaxed text-cream/60">
-              The contract has no owner, no pause button and no way for anyone to move your money.
-              Every payout follows the same code.
+              No owner, no pause button, no way for anyone to move your money. Every payout follows
+              the same code.
             </p>
-            <p className="mt-3 text-xs text-cream/40">
-              Need an Agent ID? Claim it in the Binance app: Wallet &gt; homepage banner &gt; Agent ID.
+            <p className="mt-3 text-xs leading-relaxed text-cream/40">
+              Need an Agent ID? Claim it in the Binance App: Wallet, homepage banner, Agent ID.
             </p>
           </div>
         </div>

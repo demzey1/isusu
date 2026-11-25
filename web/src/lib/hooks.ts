@@ -2,17 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { usePublicClient } from "wagmi";
 import type { Address } from "viem";
 
 import { isusuAbi } from "./abi";
-import { agentIdAbi, erc20Abi } from "./abi-extra";
-import { AGENT_ID_ADDRESS, ISUSU_ADDRESS, USDT_ADDRESS } from "./config";
+import { publicClient } from "./client";
+import { ISUSU_ADDRESS, isConfigured } from "./config";
 import type { CircleDetail, CircleView, MemberView, Seat } from "./types";
 
 /** A clock that follows the chain, not the laptop. Ticks between block reads. */
 export function useNow(intervalMs = 1000) {
-  const client = usePublicClient();
   const [now, setNow] = useState(0);
 
   useEffect(() => {
@@ -22,49 +20,33 @@ export function useNow(intervalMs = 1000) {
 
     const sync = async () => {
       try {
-        const block = await client!.getBlock({ blockTag: "latest" });
+        const block = await publicClient.getBlock({ blockTag: "latest" });
         if (cancelled) return;
         base = Number(block.timestamp);
-        measuredAt = Date.now();
-        setNow(base);
       } catch {
         if (cancelled) return;
         base = Math.floor(Date.now() / 1000);
-        measuredAt = Date.now();
-        setNow(base);
       }
+      measuredAt = Date.now();
+      setNow(base);
     };
 
-    if (client) {
-      void sync();
-      const poll = setInterval(() => void sync(), 6000);
-      const tick = setInterval(() => {
-        setNow(base ? base + Math.floor((Date.now() - measuredAt) / 1000) : Math.floor(Date.now() / 1000));
-      }, intervalMs);
-      return () => {
-        cancelled = true;
-        clearInterval(poll);
-        clearInterval(tick);
-      };
-    }
+    void sync();
+    const poll = isConfigured ? setInterval(() => void sync(), 6000) : undefined;
+    const tick = setInterval(() => {
+      base ||= Math.floor(Date.now() / 1000);
+      measuredAt ||= Date.now();
+      setNow(base + Math.floor((Date.now() - measuredAt) / 1000));
+    }, intervalMs);
 
-    base = Math.floor(Date.now() / 1000);
-    measuredAt = Date.now();
-    setNow(base);
-    const tick = setInterval(
-      () => setNow(base + Math.floor((Date.now() - measuredAt) / 1000)),
-      intervalMs,
-    );
-    return () => clearInterval(tick);
-  }, [client, intervalMs]);
+    return () => {
+      cancelled = true;
+      if (poll) clearInterval(poll);
+      clearInterval(tick);
+    };
+  }, [intervalMs]);
 
   return now;
-}
-
-export function useMounted() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
 }
 
 function normalize(raw: {
@@ -112,12 +94,11 @@ function normalizeMember(raw: MemberView): MemberView {
 }
 
 export function useCircleCount() {
-  const client = usePublicClient();
   return useQuery({
     queryKey: ["circleCount", ISUSU_ADDRESS],
-    enabled: Boolean(client),
+    enabled: isConfigured,
     queryFn: async () => {
-      const count = await client!.readContract({
+      const count = await publicClient.readContract({
         address: ISUSU_ADDRESS,
         abi: isusuAbi,
         functionName: "circleCount",
@@ -131,7 +112,6 @@ export type PoolSummary = { id: number; view: CircleView; seats: Seat[] };
 
 /** Every circle, newest first, with just enough seat data for the mini ring. */
 export function usePools() {
-  const client = usePublicClient();
   const countQuery = useCircleCount();
   const count = countQuery.data ?? 0;
   const shown = Math.min(count, 24);
@@ -139,10 +119,9 @@ export function usePools() {
 
   const poolsQuery = useQuery({
     queryKey: ["pools", count, ISUSU_ADDRESS],
-    enabled: Boolean(client) && count > 0,
+    enabled: isConfigured && count > 0,
     queryFn: async (): Promise<PoolSummary[]> => {
-      const c = client!;
-      const results = await c.multicall({
+      const results = await publicClient.multicall({
         contracts: ids.map((id) => ({
           address: ISUSU_ADDRESS,
           abi: isusuAbi,
@@ -173,7 +152,7 @@ export function usePools() {
       }
 
       const owners = calls.length
-        ? await c.multicall({ contracts: calls, allowFailure: true })
+        ? await publicClient.multicall({ contracts: calls, allowFailure: true })
         : [];
       let cursor = 0;
       return views.map((entry) => {
@@ -205,14 +184,11 @@ export function usePools() {
 
 /** One circle with its seats and member records. */
 export function useCircleDetail(id: number) {
-  const client = usePublicClient();
-
   return useQuery({
     queryKey: ["circle", id, ISUSU_ADDRESS],
-    enabled: Boolean(client) && Number.isFinite(id) && id > 0,
+    enabled: isConfigured && Number.isFinite(id) && id > 0,
     queryFn: async (): Promise<CircleDetail> => {
-      const c = client!;
-      const raw = await c.readContract({
+      const raw = await publicClient.readContract({
         address: ISUSU_ADDRESS,
         abi: isusuAbi,
         functionName: "getCircle",
@@ -222,7 +198,7 @@ export function useCircleDetail(id: number) {
       const slots = view.slots;
 
       const [owners, memberTotal] = await Promise.all([
-        c.multicall({
+        publicClient.multicall({
           contracts: Array.from({ length: slots }, (_, index) => ({
             address: ISUSU_ADDRESS,
             abi: isusuAbi,
@@ -231,7 +207,7 @@ export function useCircleDetail(id: number) {
           })),
           allowFailure: false,
         }),
-        c.readContract({
+        publicClient.readContract({
           address: ISUSU_ADDRESS,
           abi: isusuAbi,
           functionName: "memberCount",
@@ -242,7 +218,7 @@ export function useCircleDetail(id: number) {
       const total = Number(memberTotal);
       let addresses: readonly Address[] = [];
       if (total > 0) {
-        addresses = await c.multicall({
+        addresses = await publicClient.multicall({
           contracts: Array.from({ length: total }, (_, index) => ({
             address: ISUSU_ADDRESS,
             abi: isusuAbi,
@@ -255,7 +231,7 @@ export function useCircleDetail(id: number) {
 
       let memberRows: readonly MemberView[] = [];
       if (addresses.length > 0) {
-        const results = await c.multicall({
+        const results = await publicClient.multicall({
           contracts: addresses.map((address) => ({
             address: ISUSU_ADDRESS,
             abi: isusuAbi,
@@ -291,53 +267,6 @@ export function useCircleDetail(id: number) {
   });
 }
 
-/** Agent ID balance; anything above zero can open or join a circle. */
-export function useAgentId(address?: Address) {
-  const client = usePublicClient();
-  return useQuery({
-    queryKey: ["agentId", address, AGENT_ID_ADDRESS],
-    enabled: Boolean(client) && Boolean(address),
-    queryFn: async () => {
-      const balance = await client!.readContract({
-        address: AGENT_ID_ADDRESS,
-        abi: agentIdAbi,
-        functionName: "balanceOf",
-        args: [address!],
-      });
-      return balance as bigint;
-    },
-  });
-}
-
-/** USDT balance and the exact allowance already granted to Isusu. */
-export function useUsdt(address?: Address) {
-  const client = usePublicClient();
-  return useQuery({
-    queryKey: ["usdt", address, USDT_ADDRESS, ISUSU_ADDRESS],
-    enabled: Boolean(client) && Boolean(address),
-    queryFn: async () => {
-      const [balance, allowance] = await client!.multicall({
-        contracts: [
-          {
-            address: USDT_ADDRESS,
-            abi: erc20Abi,
-            functionName: "balanceOf",
-            args: [address!],
-          },
-          {
-            address: USDT_ADDRESS,
-            abi: erc20Abi,
-            functionName: "allowance",
-            args: [address!, ISUSU_ADDRESS],
-          },
-        ],
-        allowFailure: false,
-      });
-      return { balance: balance as bigint, allowance: allowance as bigint };
-    },
-  });
-}
-
 export type ProfileEntry = {
   id: number;
   view: CircleView;
@@ -346,18 +275,16 @@ export type ProfileEntry = {
 
 /** Every circle this wallet holds a seat in, newest first. */
 export function useProfile(address?: Address) {
-  const client = usePublicClient();
   const countQuery = useCircleCount();
   const count = countQuery.data ?? 0;
   const ids = useMemo(() => Array.from({ length: count }, (_, i) => count - i), [count]);
 
   const profileQuery = useQuery({
     queryKey: ["profile", address, count, ISUSU_ADDRESS],
-    enabled: Boolean(client) && Boolean(address) && count > 0,
+    enabled: isConfigured && Boolean(address) && count > 0,
     queryFn: async (): Promise<ProfileEntry[]> => {
-      const c = client!;
       const [views, members] = await Promise.all([
-        c.multicall({
+        publicClient.multicall({
           contracts: ids.map((id) => ({
             address: ISUSU_ADDRESS,
             abi: isusuAbi,
@@ -366,7 +293,7 @@ export function useProfile(address?: Address) {
           })),
           allowFailure: true,
         }),
-        c.multicall({
+        publicClient.multicall({
           contracts: ids.map((id) => ({
             address: ISUSU_ADDRESS,
             abi: isusuAbi,

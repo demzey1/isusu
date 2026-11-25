@@ -16,8 +16,7 @@
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "viem": "^2.58.4",
-    "wagmi": "^2.19.5"
+    "viem": "^2.58.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",

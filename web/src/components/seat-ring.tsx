@@ -1,14 +1,12 @@
 "use client";
 
-import type { Address } from "viem";
-
 import { formatUsdt } from "@/lib/format";
 import { seatState, type CircleDetail, type SeatState } from "@/lib/types";
 
 import { UsdtLogo } from "./usdt-logo";
 
 const SEAT_STYLE: Record<SeatState, string> = {
-  empty: "border-2 border-dashed border-ink/25 bg-cream text-ink/35 hover:border-indigo/60 hover:text-indigo",
+  empty: "border-2 border-dashed border-ink/25 bg-cream text-ink/35 hover:border-marigold hover:text-ink",
   taken: "border border-ink/20 bg-ink text-cream",
   paid: "border border-moss/30 bg-moss text-cream",
   late: "border border-clay/40 bg-clay text-cream",
@@ -28,14 +26,12 @@ export function SeatRing({
   now,
   selected,
   onSelect,
-  myAddress,
   className = "",
 }: {
   detail: CircleDetail;
   now: number;
   selected?: number | null;
   onSelect?: (slot: number) => void;
-  myAddress?: Address;
   className?: string;
 }) {
   const { view, seats } = detail;
@@ -113,8 +109,6 @@ export function SeatRing({
         const state = seatState(seat, view, now);
         const isRecipient = seat.slot === recipient;
         const isSelected = selected === seat.slot;
-        const isMine =
-          myAddress && seat.owner && seat.owner.toLowerCase() === myAddress.toLowerCase();
 
         const interactive = joinable && state === "empty";
 
@@ -126,7 +120,7 @@ export function SeatRing({
             onClick={() => interactive && onSelect?.(seat.slot)}
             aria-label={`Seat ${seat.slot}: ${SEAT_LABEL[state]}${
               isRecipient ? ", receives the pot this round" : ""
-            }${isMine ? ", yours" : ""}`}
+            }`}
             aria-pressed={isSelected}
             className={`absolute flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full font-mono transition duration-200 ${size} ${
               SEAT_STYLE[state]
@@ -136,9 +130,6 @@ export function SeatRing({
             style={{ left: `${left}%`, top: `${top}%` }}
           >
             <span className="tnum">{seat.slot}</span>
-            {isMine && (
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-cream bg-marigold" />
-            )}
             {isRecipient && (
               <span className="absolute -bottom-1.5 rounded-full bg-marigold px-1.5 py-[1px] text-[0.5rem] font-semibold uppercase tracking-wider text-ink">
                 pot

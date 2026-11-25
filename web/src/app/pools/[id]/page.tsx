@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { PoolDetail } from "@/components/pool-detail";
 
 export const metadata: Metadata = {
-  title: "Circle — Isusu",
+  title: "Circle | Isusu",
   description: "The seats, the round and the payout order, straight from the contract.",
 };
 

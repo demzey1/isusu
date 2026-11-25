@@ -2,13 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useAccount } from "wagmi";
 
 import { CirclePanel } from "@/components/circle-panel";
 import { Countdown } from "@/components/countdown";
 import { ArrowRight, Clock } from "@/components/icons";
 import { RingLegend, SeatRing } from "@/components/seat-ring";
-import { RiskNote } from "@/components/risk-note";
 import { UsdtLogo } from "@/components/usdt-logo";
 import { ISUSU_ADDRESS } from "@/lib/config";
 import { formatDate, formatDuration, formatUsdt, shortAddress } from "@/lib/format";
@@ -16,8 +14,8 @@ import { useCircleDetail, useNow } from "@/lib/hooks";
 import { circleStatus, STATUS_LABEL, type Seat } from "@/lib/types";
 
 const CHIP: Record<string, string> = {
-  open: "border-indigo/20 bg-indigo/[0.07] text-indigo",
-  active: "border-moss/25 bg-moss/[0.09] text-moss",
+  open: "border-marigold/40 bg-marigold/15 text-ink",
+  active: "border-ink/15 bg-ink/[0.05] text-ink/70",
   finished: "border-ink/15 bg-ink/[0.05] text-ink/55",
   cancelled: "border-clay/25 bg-clay/[0.08] text-clay",
   expired: "border-clay/25 bg-clay/[0.08] text-clay",
@@ -25,7 +23,6 @@ const CHIP: Record<string, string> = {
 
 export function PoolDetail({ id }: { id: number }) {
   const now = useNow();
-  const { address } = useAccount();
   const query = useCircleDetail(id);
   const [selected, setSelected] = useState<number | null>(null);
 
@@ -71,12 +68,10 @@ export function PoolDetail({ id }: { id: number }) {
     if (seat.member?.defaulted) return { label: "Defaulted", tone: "text-clay" };
     if (view.cancelled) {
       return seat.member && seat.member.credit > 0n
-        ? { label: "Refund ready", tone: "text-moss" }
+        ? { label: "Refund ready", tone: "text-marigold" }
         : { label: "Refunded", tone: "text-ink/45" };
     }
     if (view.finished) return { label: "Finished", tone: "text-ink/45" };
-    // Round 0 = still filling (or past its deadline). The round-1 payment
-    // bought the seat; it wasn't a round payment.
     if (view.round === 0) return { label: "Seat held", tone: "text-ink/50" };
     if (seat.member?.paid) return { label: "Paid this round", tone: "text-moss" };
     if (now > Number(view.deadline)) return { label: "Late", tone: "text-clay" };
@@ -113,14 +108,14 @@ export function PoolDetail({ id }: { id: number }) {
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink/55">
             {open
-              ? `${view.joined} of ${view.slots} seats taken. Join by ${formatDate(view.joinDeadline)} and take your turn.`
+              ? `${view.joined} of ${view.slots} seats taken. Join by ${formatDate(view.joinDeadline)}.`
               : view.cancelled
-                ? "The circle never filled. Every member can pull back their full payment."
+                ? "The circle never filled. Members withdraw their own refunds."
                 : view.finished
-                  ? "All rounds have settled. Payouts were automatic."
+                  ? "All rounds have settled."
                   : view.round === 0
-                    ? `The circle never filled: ${view.joined} of ${view.slots} seats by the deadline.`
-                    : `Round ${view.round} of ${view.slots}. ${paidCount} of ${view.active} seats have paid this round.`}
+                    ? `${view.joined} of ${view.slots} seats by the deadline.`
+                    : `Round ${view.round} of ${view.slots}. ${paidCount} of ${view.active} seats have paid.`}
           </p>
         </div>
 
@@ -154,7 +149,7 @@ export function PoolDetail({ id }: { id: number }) {
                 : status === "cancelled"
                   ? "Full refunds"
                   : status === "finished"
-                    ? "—"
+                    ? "-"
                     : formatDate(view.deadline),
           },
         ].map((fact) => (
@@ -178,14 +173,14 @@ export function PoolDetail({ id }: { id: number }) {
                   : view.cancelled
                     ? "Refunds are pulled by each member."
                     : view.finished
-                      ? "Every payout in this circle has been made."
+                      ? "Every payout has been made."
                       : view.round === 0
-                        ? "The circle never filled, so no round ever started."
+                        ? "No round ever started."
                         : "The marigold seat takes this round's pot."}
               </p>
             </div>
             {open && (
-              <span className="flex items-center gap-1.5 rounded-full bg-indigo/[0.07] px-3 py-1 text-xs text-indigo">
+              <span className="flex items-center gap-1.5 rounded-full bg-marigold/15 px-3 py-1 text-xs text-ink/70">
                 <Clock className="h-3.5 w-3.5" />
                 <Countdown target={view.joinDeadline} now={now} doneLabel="Closed" />
               </span>
@@ -198,35 +193,31 @@ export function PoolDetail({ id }: { id: number }) {
               now={now}
               selected={selected}
               onSelect={open ? (slot) => setSelected(slot) : undefined}
-              myAddress={address}
             />
           </div>
 
           <RingLegend className="mt-5 justify-center" />
 
           {view.finished && !view.cancelled && (
-            <p className="mt-4 rounded-xl bg-moss/[0.07] p-3 text-xs leading-relaxed text-moss">
-              Every payout in this circle went out automatically when its round settled. There is no
-              claim step.
+            <p className="mt-4 rounded-xl bg-ink/[0.04] p-3 text-xs leading-relaxed text-ink/55">
+              Payouts went out as each round settled. No claim step.
             </p>
           )}
           {view.cancelled && (
             <p className="mt-4 rounded-xl bg-clay/[0.07] p-3 text-xs leading-relaxed text-clay">
-              This circle was cancelled after its join deadline. Members withdraw their own refunds.
+              Cancelled after the join deadline. Members withdraw their own refunds.
             </p>
           )}
           {view.pool > 0n && !view.finished && (
             <p className="mt-4 rounded-xl bg-ink/[0.035] p-3 text-xs leading-relaxed text-ink/55">
-              <span className="tnum font-mono">{formatUsdt(view.pool)} USDT</span> is held back for
-              compensation. It goes to members who are owed after a default, or back into refunds at the
-              end.
+              <span className="tnum font-mono">{formatUsdt(view.pool)} USDT</span> is held for
+              compensation after a default. Any surplus returns to members at the end.
             </p>
           )}
 
           <div className="mt-5 flex flex-col gap-1 border-t border-ink/[0.08] pt-4 text-xs text-ink/40">
             <p>
-              Opened by{" "}
-              <span className="font-mono text-ink/60">{shortAddress(view.creator)}</span>
+              Opened by <span className="font-mono text-ink/60">{shortAddress(view.creator)}</span>
               {" · "}
               Join deadline {formatDate(view.joinDeadline)}
             </p>
@@ -242,10 +233,14 @@ export function PoolDetail({ id }: { id: number }) {
             now={now}
             selected={selected}
             onSelect={setSelected}
-            address={address}
           />
-
-          <RiskNote compact />
+          <p className="text-xs leading-relaxed text-ink/45">
+            Actions happen through your agent.{" "}
+            <Link href="/rules" className="font-medium text-ink underline underline-offset-2">
+              Read the rules
+            </Link>
+            .
+          </p>
         </div>
       </div>
 
@@ -253,10 +248,10 @@ export function PoolDetail({ id }: { id: number }) {
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink/40">
-              Seats &amp; record
+              Seats
             </p>
             <h2 className="mt-1 font-display text-2xl font-semibold tracking-[-0.02em]">
-              Who&apos;s in this circle
+              Who is in this circle
             </h2>
           </div>
           <p className="text-xs text-ink/35">Straight from the contract</p>
@@ -265,7 +260,6 @@ export function PoolDetail({ id }: { id: number }) {
         <ol className="mt-4 divide-y divide-ink/[0.08] overflow-hidden rounded-card border border-ink/[0.1] bg-white/45">
           {seats.map((seat) => {
             const state = seatStatus(seat);
-            const mine = address && seat.owner?.toLowerCase() === address.toLowerCase();
             return (
               <li key={seat.slot} className="flex items-center gap-3 px-4 py-3 sm:gap-5 sm:px-5">
                 <span
@@ -293,11 +287,6 @@ export function PoolDetail({ id }: { id: number }) {
                     ) : (
                       <span className="text-ink/35">Open seat</span>
                     )}
-                    {mine && (
-                      <span className="ml-2 rounded-full bg-marigold/25 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wider text-ink/70">
-                        You
-                      </span>
-                    )}
                   </p>
                   <p className={`mt-0.5 text-xs ${state.tone}`}>
                     {state.label}
@@ -307,7 +296,7 @@ export function PoolDetail({ id }: { id: number }) {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[0.6rem] uppercase tracking-[0.1em] text-ink/30">If full</p>
+                  <p className="text-[0.6rem] uppercase tracking-[0.1em] text-ink/30">Payout</p>
                   <p className="tnum font-mono text-xs text-ink/65">
                     R{seat.slot} · {formatUsdt(view.contribution * BigInt(view.slots))}
                   </p>
@@ -316,12 +305,6 @@ export function PoolDetail({ id }: { id: number }) {
             );
           })}
         </ol>
-
-        <p className="mt-3 text-xs leading-relaxed text-ink/40">
-          Payout order is fixed by seat: seat 1 in round 1, seat 2 in round 2, and so on. Seats are final
-          once the circle fills. A round pays the contributions actually received; if someone defaults,
-          the compensation pool tops up any shortfall at the end of the circle.
-        </p>
       </section>
     </div>
   );
@@ -332,11 +315,10 @@ function NotFound() {
     <div className="mx-auto w-full max-w-2xl px-4 py-20 text-center sm:px-6">
       <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-clay">Not found</p>
       <h1 className="mt-2 font-display text-4xl font-semibold tracking-[-0.03em]">
-        This circle doesn&apos;t exist.
+        This circle does not exist.
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-ink/55">
-        The contract has no circle with that number. It may not have been opened yet, or the link may be
-        wrong.
+        The contract has no circle with that number.
       </p>
       <Link
         href="/pools"

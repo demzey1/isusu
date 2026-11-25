@@ -9,8 +9,8 @@ import { MiniRing } from "./mini-ring";
 import { UsdtLogo } from "./usdt-logo";
 
 const CHIP: Record<string, string> = {
-  open: "border-indigo/20 bg-indigo/[0.07] text-indigo",
-  active: "border-moss/25 bg-moss/[0.09] text-moss",
+  open: "border-marigold/50 bg-marigold/20 text-ink",
+  active: "border-ink/20 bg-ink/[0.06] text-ink/70",
   finished: "border-ink/15 bg-ink/[0.05] text-ink/55",
   cancelled: "border-clay/25 bg-clay/[0.08] text-clay",
   expired: "border-clay/25 bg-clay/[0.08] text-clay",
@@ -85,13 +85,13 @@ export function PoolCard({
             ) : status === "expired" ? (
               <span className="text-clay">Passed</span>
             ) : (
-              <span className="text-ink/50">—</span>
+              <span className="text-ink/50">Settled</span>
             )}
           </dd>
         </div>
       </dl>
 
-      <div className="mt-4 flex items-center justify-between border-t border-ink/[0.08] pt-3 text-[0.8rem] font-medium text-indigo">
+      <div className="mt-4 flex items-center justify-between border-t border-ink/[0.08] pt-3 text-[0.8rem] font-medium text-ink">
         <span>
           {status === "open"
             ? "See the seats"

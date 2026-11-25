@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { ButtonLink } from "@/components/button";
 import { ArrowUpRight } from "@/components/icons";
 import { PoolCard } from "@/components/pool-card";
-import { RiskNote } from "@/components/risk-note";
 import { ISUSU_ADDRESS, isConfigured } from "@/lib/config";
 import { useNow, usePools } from "@/lib/hooks";
 import { circleStatus, type CircleStatus } from "@/lib/types";
@@ -48,15 +47,15 @@ export default function PoolsPage() {
     <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-indigo/70">
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-ink/45">
             Circles
           </p>
           <h1 className="mt-2 max-w-2xl font-display text-[clamp(2.2rem,5vw,3.6rem)] font-semibold leading-[1.0] tracking-[-0.04em]">
             Find your people. Take your turn.
           </h1>
           <p className="mt-3 max-w-xl text-[0.95rem] leading-relaxed text-ink/60">
-            Every circle below is live on-chain. Open the ring to see who&apos;s already in, what each
-            seat costs, and when the pot lands.
+            Every circle here is live on-chain. Open one to see the seats, the cost and the payout
+            order.
           </p>
         </div>
         <ButtonLink href="/pools/create" className="shrink-0">
@@ -79,7 +78,7 @@ export default function PoolsPage() {
             >
               {item.label}
               {item.key === "open" && openCount > 0 && (
-                <span className={`tnum ml-1.5 font-mono text-xs ${active ? "text-marigold" : "text-indigo/60"}`}>
+                <span className={`tnum ml-1.5 font-mono text-xs ${active ? "text-marigold" : "text-ink/45"}`}>
                   {openCount}
                 </span>
               )}
@@ -97,18 +96,12 @@ export default function PoolsPage() {
       </div>
 
       {!isConfigured ? (
-        <div className="mt-8 rounded-card border border-clay/30 bg-clay/[0.06] p-6">
-          <p className="font-display text-xl font-semibold">No contract address configured</p>
-          <p className="mt-2 text-sm leading-relaxed text-ink/60">
-            Set <code className="rounded bg-ink/10 px-1.5 py-0.5 font-mono text-xs">NEXT_PUBLIC_ISUSU_ADDRESS</code>{" "}
-            to a deployed Isusu contract, then reload. Nothing is mocked here.
-          </p>
-        </div>
+        <EmptyState />
       ) : isError ? (
         <div className="mt-8 rounded-card border border-clay/30 bg-clay/[0.06] p-6">
-          <p className="font-display text-xl font-semibold">Couldn&apos;t reach the chain</p>
+          <p className="font-display text-xl font-semibold">Could not reach the chain</p>
           <p className="mt-2 text-sm leading-relaxed text-ink/60">
-            The RPC didn&apos;t answer. Check your connection or the configured RPC URL.
+            The RPC did not answer. Check your connection or the configured RPC URL.
           </p>
           <button
             type="button"
@@ -128,23 +121,7 @@ export default function PoolsPage() {
           ))}
         </div>
       ) : visible.length === 0 ? (
-        <div className="dot-field-fine mt-8 rounded-card border border-dashed border-ink/15 bg-white/30 px-6 py-16 text-center text-ink/20">
-          <div className="mx-auto max-w-sm text-ink">
-            <p className="font-display text-2xl font-semibold tracking-[-0.02em]">
-              {filter === "all" ? "No circles yet." : "Nothing in this view."}
-            </p>
-            <p className="mt-2 text-sm leading-relaxed text-ink/55">
-              {filter === "all"
-                ? "Every circle starts with one person opening it. Yours can be the first on this contract."
-                : "Try another filter, or open a new circle of your own."}
-            </p>
-            <div className="mt-5 flex justify-center">
-              <ButtonLink href="/pools/create">
-                Start a circle <ArrowUpRight />
-              </ButtonLink>
-            </div>
-          </div>
-        </div>
+        <EmptyState filtered={filter !== "all"} onReset={() => setFilter("all")} />
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((pool) => (
@@ -153,11 +130,39 @@ export default function PoolsPage() {
         </div>
       )}
 
-      <div className="mt-10">
-        <RiskNote compact />
-        <p className="mt-4 break-anywhere font-mono text-[0.65rem] text-ink/30">
-          Contract {ISUSU_ADDRESS}
+      <p className="mt-10 break-anywhere font-mono text-[0.65rem] text-ink/30">
+        Contract {ISUSU_ADDRESS}
+      </p>
+    </div>
+  );
+}
+
+function EmptyState({ filtered = false, onReset }: { filtered?: boolean; onReset?: () => void }) {
+  return (
+    <div className="mt-8 rounded-card border border-dashed border-ink/15 bg-white/30 px-6 py-16 text-center">
+      <div className="mx-auto max-w-sm text-ink">
+        <p className="font-display text-2xl font-semibold tracking-[-0.02em]">
+          {filtered ? "Nothing in this view." : "No circles yet."}
         </p>
+        <p className="mt-2 text-sm leading-relaxed text-ink/55">
+          {filtered
+            ? "Try another filter."
+            : "Open the first circle for five people you trust."}
+        </p>
+        <div className="mt-5 flex justify-center gap-2">
+          {filtered && onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="rounded-full border border-ink/15 px-4 py-2.5 text-sm font-medium text-ink/70 transition hover:border-ink/30 hover:text-ink"
+            >
+              Show all
+            </button>
+          )}
+          <ButtonLink href="/pools/create">
+            Start a circle <ArrowUpRight />
+          </ButtonLink>
+        </div>
       </div>
     </div>
   );

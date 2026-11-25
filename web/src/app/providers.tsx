@@ -1,10 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WagmiProvider } from "wagmi";
 
-import { wagmiConfig } from "@/lib/config";
+import { publicClient } from "@/lib/client";
+import { isConfigured } from "@/lib/config";
+
+function ChainWatcher({ queryClient }: { queryClient: QueryClient }) {
+  useEffect(() => {
+    if (!isConfigured) return;
+    const unwatch = publicClient.watchBlocks({
+      emitOnBegin: false,
+      poll: true,
+      onBlock: () => {
+        void queryClient.invalidateQueries();
+      },
+    });
+    return () => unwatch();
+  }, [queryClient]);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -12,8 +28,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 4_000,
-            refetchInterval: 8_000,
+            staleTime: 3_000,
+            refetchInterval: 6_000,
             retry: 1,
           },
         },
@@ -21,8 +37,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    </WagmiProvider>
+    <QueryClientProvider client={queryClient}>
+      <ChainWatcher queryClient={queryClient} />
+      {children}
+    </QueryClientProvider>
   );
 }

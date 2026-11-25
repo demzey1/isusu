@@ -1,7 +1,7 @@
 export const USDT_DECIMALS = 18;
 
 export function formatUsdt(value: bigint | undefined, maxDigits = 2): string {
-  if (value === undefined) return "—";
+  if (value === undefined) return "-";
   const whole = value / 10n ** BigInt(USDT_DECIMALS);
   const frac = value % 10n ** BigInt(USDT_DECIMALS);
   const fracStr = frac.toString().padStart(USDT_DECIMALS, "0").slice(0, maxDigits);
@@ -10,7 +10,7 @@ export function formatUsdt(value: bigint | undefined, maxDigits = 2): string {
 }
 
 export function usdtParts(value: bigint | undefined): { whole: string; frac: string } {
-  if (value === undefined) return { whole: "—", frac: "" };
+  if (value === undefined) return { whole: "-", frac: "" };
   const whole = value / 10n ** BigInt(USDT_DECIMALS);
   const frac = value % 10n ** BigInt(USDT_DECIMALS);
   const wholeStr = new Intl.NumberFormat("en-US").format(whole);

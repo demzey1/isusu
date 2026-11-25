@@ -26,9 +26,9 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Isusu — save together, take turns",
+  title: "Isusu: save together, take turns",
   description:
-    "Rotating savings circles settled in USDT. Everyone pays the same, everyone takes the pot once, and the rules can't be edited.",
+    "Rotating savings circles settled in USDT. Everyone pays the same, everyone takes the pot once, and the terms cannot change.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
