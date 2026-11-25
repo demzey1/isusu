@@ -144,6 +144,6 @@ describe("CLI commands", () => {
     expect(command).toBe(
       `baw contract-call preview --binanceChainId 56 --from ${WALLET} --to ${ISUSU_ADDRESS} --value 0 --inputData ${data} --json`,
     );
-    expect(executeCommand()).toBe("baw contract-call execute --requestId <requestId> --json");
+    expect(executeCommand()).toBe("baw contract-call execute --requestId <id> --json");
   });
 });

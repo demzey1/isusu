@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { executeCommand, previewCommand, type AgentStep } from "@/lib/calldata";
 
 import { useAgenticWallet } from "./agentic-wallet";
+import { btnPrimary } from "./button";
 import { Check, Copy } from "./icons";
 
 export const AGENT_WRAPPER =
@@ -71,68 +72,66 @@ export function AgentActions({
   }
 
   return (
-    <aside className="rounded-card border border-ink/[0.1] bg-ink p-5 text-cream sm:p-6">
-      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-cream/40">
+    <aside className="min-w-0 rounded-xl border border-line bg-ink p-5 text-cream sm:p-6">
+      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-cream/60">
         Agent actions
       </p>
 
-      <p className="mt-2 text-sm leading-relaxed text-cream/75">{AGENT_WRAPPER}</p>
+      <p className="mt-3 text-sm leading-relaxed text-cream/80">{AGENT_WRAPPER}</p>
 
-      {amountLabel && (
-        <p className="mt-3 flex items-baseline justify-between gap-3 border-y border-cream/10 py-2 text-sm">
-          <span className="text-cream/50">Exact cost</span>
+      {amountLabel ? (
+        <p className="mt-4 flex items-baseline justify-between gap-3 border-y border-line py-3 text-sm">
+          <span className="text-cream/60">Exact cost</span>
           <span className="tnum font-mono text-cream">{amountLabel}</span>
         </p>
-      )}
+      ) : null}
 
-      <ol className="mt-4 space-y-4">
+      <ol className="mt-5 space-y-5">
         {steps.map((step, index) => (
-          <li key={`${step.title}-${index}`}>
+          <li key={`${step.title}-${index}`} className="min-w-0">
             <p className="text-sm font-semibold text-cream">
               Step {index + 1}: {step.title}
             </p>
-            <p className="mt-1 text-xs leading-relaxed text-cream/55">{step.detail}</p>
-            <p className="mt-1 break-anywhere font-mono text-[0.65rem] text-cream/35">
-              Contract: {step.to}
+            <p className="mt-1 text-[13px] leading-relaxed text-cream/70">{step.detail}</p>
+            <p className="scroll-box mt-2 font-mono text-[13px] text-cream/60">
+              <span className="whitespace-nowrap">Contract: {step.to}</span>
             </p>
-            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-anywhere rounded-xl bg-cream/[0.06] p-3 font-mono text-[0.72rem] leading-relaxed text-cream/80">
-              {previewCommand({ wallet: address, to: step.to, inputData: step.inputData })}
-              {"\n"}
-              {executeCommand()}
+            <pre className="scroll-box mt-2 max-h-64 rounded-xl bg-cream/[0.06] p-3 font-mono text-[13px] leading-relaxed text-cream">
+              <span className="whitespace-nowrap">
+                {previewCommand({ wallet: address, to: step.to, inputData: step.inputData })}
+                {"\n"}
+                {executeCommand()}
+              </span>
             </pre>
           </li>
         ))}
       </ol>
 
-      <p className="mt-4 rounded-xl border border-cream/10 p-3 text-xs leading-relaxed text-cream/60">
+      <p className="mt-5 rounded-xl border border-line bg-cream/[0.06] p-3 text-[13px] leading-relaxed text-cream/75">
         {DAILY_LIMIT_NOTE}
       </p>
 
-      {!address && (
-        <p className="mt-2 text-[0.68rem] leading-relaxed text-cream/40">
+      {!address ? (
+        <p className="mt-3 text-[13px] leading-relaxed text-cream/60">
           Add your Agentic Wallet address at the top to fill in --from.
         </p>
-      )}
+      ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={copy}
-          className="inline-flex items-center gap-2 rounded-full bg-marigold px-4 py-2.5 text-sm font-semibold text-ink transition hover:brightness-[1.03]"
-        >
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={copy} className={btnPrimary}>
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           {copied ? "Copied" : "Copy all"}
         </button>
-        <span className="text-[0.68rem] leading-relaxed text-cream/40">
+        <span className="text-[13px] leading-relaxed text-cream/60">
           Preview and confirmation stay with your agent.
         </span>
       </div>
 
-      {failed && (
-        <p className="mt-2 text-xs text-clay" role="alert">
+      {failed ? (
+        <p className="mt-3 text-[13px] text-clay" role="alert">
           Copy failed. Select the text and copy it manually.
         </p>
-      )}
+      ) : null}
     </aside>
   );
 }

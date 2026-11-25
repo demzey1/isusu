@@ -180,5 +180,5 @@ export function previewCommand(args: {
 }
 
 export function executeCommand(): string {
-  return "baw contract-call execute --requestId <requestId> --json";
+  return "baw contract-call execute --requestId <id> --json";
 }
