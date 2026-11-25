@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
     "shots": "node scripts/shots.mjs",
     "local:seed": "node scripts/seed-local.mjs",
     "local:seed:mock": "node scripts/seed-local.mjs --mocks"
@@ -25,6 +26,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "tailwindcss": "^4.3.5",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^5.1.1"
   }
 }

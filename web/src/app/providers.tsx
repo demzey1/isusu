@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { AgenticWalletProvider } from "@/components/agentic-wallet";
+
 import { publicClient } from "@/lib/client";
 import { isConfigured } from "@/lib/config";
 
@@ -38,8 +40,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ChainWatcher queryClient={queryClient} />
-      {children}
+      <AgenticWalletProvider>
+        <ChainWatcher queryClient={queryClient} />
+        {children}
+      </AgenticWalletProvider>
     </QueryClientProvider>
   );
 }

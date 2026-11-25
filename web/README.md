@@ -20,22 +20,33 @@ Environment (see `.env.example`):
 | --- | --- |
 | `NEXT_PUBLIC_ISUSU_ADDRESS` | The Isusu circle contract. Leave zero to show the empty state. |
 | `NEXT_PUBLIC_USDT_ADDRESS` | USDT on BNB Chain (`0x55d398…7955`, 18 decimals). |
+| `NEXT_PUBLIC_AGENT_ID_ADDRESS` | Agent ID contract on BNB Chain. |
 | `NEXT_PUBLIC_RPC_URL` | Chain 56 RPC. Use `http://127.0.0.1:8545` with a local chain. |
 | `NEXT_PUBLIC_LOGO_DEV_TOKEN` | Optional Logo.dev token for the USDT and BNB Chain marks. |
 
 Without a token, both marks fall back to local SVGs.
 
-`npm run build` / `npm start` for a production build. `npm run shots` writes Playwright screenshots
-at 390, 768 and 1280 px to `screenshots/` and fails on horizontal overflow (the app must be running;
-set `BASE_URL`, `SHOT_PATHS`, `SHOT_WIDTHS` or `CHROME_PATH` to override).
+`npm run build` / `npm start` for a production build. `npm test` decodes every generated calldata
+and checks its function and arguments. `npm run shots` writes Playwright screenshots at 390, 768 and
+1280 px to `screenshots/` and fails on horizontal overflow (the app must be running; set `BASE_URL`,
+`SHOT_PATHS`, `SHOT_WIDTHS` or `CHROME_PATH` to override).
 
 ## Agent actions
 
-There are no wallet connection buttons. Each action exposes a copyable request: join,
-contribute, create and withdraw. Paste it into your agent, which previews each step, shows the
-amounts and waits for confirmation. This needs Developer Mode on in the Binance App.
+There are no wallet connection buttons. Add your public Agentic Wallet address in the field under
+the header. It is saved in localStorage and used as `--from`. The Agent ID, USDT balance and USDT
+allowance checks are read only. Nothing is connected and nothing is signed.
 
-Requests always approve the exact USDT amount for that action, never an unlimited allowance.
+Each action renders literal `baw contract-call preview` and `baw contract-call execute` commands.
+The preview uses chain 56 and `--value 0`. The app encodes calldata from the real ABI with viem.
+Paste the commands into your agent. Developer Mode must be on in the Binance App. The agent previews
+every step, shows the parsed transaction and risks, waits for your yes, then executes with the
+preview `requestId`. No step skips confirmation. Set the Developer Mode daily limit high enough for
+the amount before you start.
+
+Join approves exactly the round contribution plus collateral for the chosen seat, then joins.
+Contribute approves exactly one contribution, then contributes. When on-chain allowance already
+covers the amount, the approve step is omitted. No action uses an unlimited approval.
 
 ## Local chain
 

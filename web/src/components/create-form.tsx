@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { ISUSU_ADDRESS } from "@/lib/config";
+import { buildCreateSteps } from "@/lib/calldata";
 import { formatDuration, formatUsdt } from "@/lib/format";
 
 import { AgentActions } from "./agent-actions";
@@ -43,7 +43,15 @@ export function CreateForm() {
     [contribution],
   );
 
-  const prompt = `Create an Isusu circle with 5 seats at ${formatUsdt(contribution)} USDT each round, a ${roundDays} day round and a ${joinDays} day join window. Contract ${ISUSU_ADDRESS} on BNB Chain. Step 1: call createCircle(${contribution}, ${roundDays * 86400}, ${joinDays * 86400}). No USDT is taken to open it. Preview the call, show me the arguments, and wait for my confirmation before executing.`;
+  const steps = useMemo(
+    () =>
+      buildCreateSteps({
+        contribution,
+        roundSeconds: roundDays * 86400,
+        joinSeconds: joinDays * 86400,
+      }),
+    [contribution, joinDays, roundDays],
+  );
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
@@ -178,7 +186,7 @@ export function CreateForm() {
           </ul>
         </aside>
 
-        <AgentActions prompt={prompt} amountLabel="No USDT. Network fee only." />
+        <AgentActions steps={steps} amountLabel="No USDT. Network fee only." />
       </div>
     </div>
   );

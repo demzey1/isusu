@@ -4,9 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 
-import { isusuAbi } from "./abi";
+import { agentIdAbi, isusuAbi, usdtAbi } from "./abi";
 import { publicClient } from "./client";
-import { ISUSU_ADDRESS, isConfigured } from "./config";
+import {
+  AGENT_ID_ADDRESS,
+  ISUSU_ADDRESS,
+  USDT_ADDRESS,
+  isConfigured,
+} from "./config";
 import type { CircleDetail, CircleView, MemberView, Seat } from "./types";
 
 /** A clock that follows the chain, not the laptop. Ticks between block reads. */
@@ -263,6 +268,49 @@ export function useCircleDetail(id: number) {
           };
         }),
       };
+    },
+  });
+}
+
+export type AgenticWalletChecks = {
+  agentIdBalance: bigint;
+  usdtBalance: bigint;
+  allowance: bigint;
+};
+
+/** Read-only chain checks for a public Agentic Wallet address. */
+export function useAgenticWalletChecks(address?: Address) {
+  return useQuery({
+    queryKey: [
+      "agenticChecks",
+      address,
+      AGENT_ID_ADDRESS,
+      USDT_ADDRESS,
+      ISUSU_ADDRESS,
+    ],
+    enabled: isConfigured && Boolean(address),
+    queryFn: async (): Promise<AgenticWalletChecks> => {
+      const [agentIdBalance, usdtBalance, allowance] = await Promise.all([
+        publicClient.readContract({
+          address: AGENT_ID_ADDRESS,
+          abi: agentIdAbi,
+          functionName: "balanceOf",
+          args: [address!],
+        }),
+        publicClient.readContract({
+          address: USDT_ADDRESS,
+          abi: usdtAbi,
+          functionName: "balanceOf",
+          args: [address!],
+        }),
+        publicClient.readContract({
+          address: USDT_ADDRESS,
+          abi: usdtAbi,
+          functionName: "allowance",
+          args: [address!, ISUSU_ADDRESS],
+        }),
+      ]);
+      return { agentIdBalance, usdtBalance, allowance };
     },
   });
 }

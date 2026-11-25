@@ -1,10 +1,14 @@
 "use client";
 
+import { useMemo } from "react";
+
+import { buildJoinSteps } from "@/lib/calldata";
 import { collateralFor, joinCost, payoutDelaySeconds, payoutFor } from "@/lib/circle";
-import { ISUSU_ADDRESS } from "@/lib/config";
 import { formatDuration, formatUsdt } from "@/lib/format";
+import { useAgenticWalletChecks } from "@/lib/hooks";
 import type { CircleDetail } from "@/lib/types";
 
+import { useAgenticWallet } from "./agentic-wallet";
 import { AgentActions } from "./agent-actions";
 import { Info } from "./icons";
 import { UsdtLogo } from "./usdt-logo";
@@ -19,15 +23,26 @@ export function JoinPanel({
   onSelect: (slot: number | null) => void;
 }) {
   const { view, seats } = detail;
+  const { address } = useAgenticWallet();
+  const { data: checks } = useAgenticWalletChecks(address);
   const slot = selected && selected > 0 ? selected : 0;
   const cost = slot ? joinCost(view, slot) : 0n;
   const collateral = slot ? collateralFor(view, slot) : 0n;
   const payout = payoutFor(view);
   const seatsLeft = view.slots - view.joined;
 
-  const prompt = slot
-    ? `Join Isusu circle #${detail.id}, seat ${slot}. Contract ${ISUSU_ADDRESS} on BNB Chain. Step 1: approve exactly ${formatUsdt(cost)} USDT to the contract. Step 2: call join(${detail.id}, ${slot}). Preview each step, show me the amounts, and wait for my confirmation before executing.`
-    : "";
+  const steps = useMemo(
+    () =>
+      slot
+        ? buildJoinSteps({
+            id: detail.id,
+            slot,
+            amount: cost,
+            allowance: checks?.allowance ?? 0n,
+          })
+        : [],
+    [checks?.allowance, cost, detail.id, slot],
+  );
 
   return (
     <div className="rounded-card border border-ink/[0.1] bg-white/55 p-5 shadow-[0_18px_40px_-34px_rgba(20,17,15,0.5)] sm:p-6">
@@ -116,7 +131,7 @@ export function JoinPanel({
           </div>
 
           <div className="mt-4">
-            <AgentActions prompt={prompt} amountLabel={`${formatUsdt(cost)} USDT`} />
+            <AgentActions steps={steps} amountLabel={`${formatUsdt(cost)} USDT`} />
           </div>
 
           <p className="mt-3 text-xs leading-relaxed text-ink/40">

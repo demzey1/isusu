@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Instrument_Sans, JetBrains_Mono } from "next/font/google";
 
+import { AgenticWalletField } from "@/components/agentic-wallet";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <div className="flex min-h-dvh flex-col">
             <SiteHeader />
+            <AgenticWalletField />
             <main className="flex-1">{children}</main>
             <SiteFooter />
           </div>

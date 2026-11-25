@@ -1,15 +1,26 @@
 "use client";
 
-import { ISUSU_ADDRESS } from "@/lib/config";
+import { useMemo } from "react";
+
+import {
+  buildCancelSteps,
+  buildCloseRoundSteps,
+  buildContributeSteps,
+  buildWithdrawSteps,
+} from "@/lib/calldata";
 import { formatDate, formatUsdt } from "@/lib/format";
+import { useAgenticWalletChecks } from "@/lib/hooks";
 import { circleStatus, type CircleDetail } from "@/lib/types";
 
+import { useAgenticWallet } from "./agentic-wallet";
 import { AgentActions } from "./agent-actions";
 import { CountdownBlocks } from "./countdown";
 import { Check, Clock } from "./icons";
 
 export function RoundPanel({ detail, now }: { detail: CircleDetail; now: number }) {
   const { view } = detail;
+  const { address } = useAgenticWallet();
+  const { data: checks } = useAgenticWalletChecks(address);
   const status = circleStatus(view, now);
   const paidCount = detail.seats.filter((seat) => seat.member?.paid).length;
   const overdue = now > 0 && now > Number(view.deadline);
@@ -18,11 +29,20 @@ export function RoundPanel({ detail, now }: { detail: CircleDetail; now: number 
   const panelClass =
     "rounded-card border border-ink/[0.1] bg-white/55 p-5 shadow-[0_18px_40px_-34px_rgba(20,17,15,0.5)] sm:p-6";
 
-  const withdrawPrompt = `Withdraw my full balance from Isusu circle #${detail.id}, including any refund, returned collateral or held payout. Contract ${ISUSU_ADDRESS} on BNB Chain. Step 1: call withdraw(${detail.id}). Preview the amount, show me the amount, and wait for my confirmation before executing.`;
+  const withdrawSteps = useMemo(() => buildWithdrawSteps(detail.id), [detail.id]);
+  const cancelSteps = useMemo(() => buildCancelSteps(detail.id), [detail.id]);
+  const settleSteps = useMemo(() => buildCloseRoundSteps(detail.id), [detail.id]);
+  const contributeSteps = useMemo(
+    () =>
+      buildContributeSteps({
+        id: detail.id,
+        amount: view.contribution,
+        allowance: checks?.allowance ?? 0n,
+      }),
+    [checks?.allowance, detail.id, view.contribution],
+  );
 
   if (status === "expired") {
-    const cancelPrompt = `Cancel Isusu circle #${detail.id} because it did not fill before its join deadline. Contract ${ISUSU_ADDRESS} on BNB Chain. Step 1: call cancelCircle(${detail.id}). Preview the call and wait for my confirmation before executing.`;
-
     return (
       <div className={panelClass}>
         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-clay">
@@ -37,12 +57,12 @@ export function RoundPanel({ detail, now }: { detail: CircleDetail; now: number 
         </p>
 
         <div className="mt-4">
-          <AgentActions prompt={cancelPrompt} />
+          <AgentActions steps={cancelSteps} />
         </div>
 
         <div className="mt-4">
           <AgentActions
-            prompt={withdrawPrompt}
+            steps={withdrawSteps}
             amountLabel={`${formatUsdt(view.contribution)} USDT round 1, plus collateral`}
           />
         </div>
@@ -62,7 +82,7 @@ export function RoundPanel({ detail, now }: { detail: CircleDetail; now: number 
           held balance.
         </p>
         <div className="mt-4">
-          <AgentActions prompt={withdrawPrompt} />
+          <AgentActions steps={withdrawSteps} />
         </div>
       </div>
     );
@@ -82,15 +102,11 @@ export function RoundPanel({ detail, now }: { detail: CircleDetail; now: number 
           payout.
         </p>
         <div className="mt-4">
-          <AgentActions prompt={withdrawPrompt} />
+          <AgentActions steps={withdrawSteps} />
         </div>
       </div>
     );
   }
-
-  const contributePrompt = `Contribute ${formatUsdt(view.contribution)} USDT to Isusu circle #${detail.id}. Contract ${ISUSU_ADDRESS} on BNB Chain. Step 1: approve exactly ${formatUsdt(view.contribution)} USDT to the contract. Step 2: call contribute(${detail.id}). Preview each step, show me the amounts, and wait for my confirmation before executing.`;
-
-  const settlePrompt = `Settle the overdue round of Isusu circle #${detail.id}. Contract ${ISUSU_ADDRESS} on BNB Chain. Step 1: call closeRound(${detail.id}). Preview the call, show me the amount, and wait for my confirmation before executing.`;
 
   return (
     <div className={panelClass}>
@@ -132,19 +148,19 @@ export function RoundPanel({ detail, now }: { detail: CircleDetail; now: number 
 
       <div className="mt-4">
         <AgentActions
-          prompt={contributePrompt}
+          steps={contributeSteps}
           amountLabel={`${formatUsdt(view.contribution)} USDT`}
         />
       </div>
 
       {overdue && closeable && (
         <div className="mt-4">
-          <AgentActions prompt={settlePrompt} />
+          <AgentActions steps={settleSteps} />
         </div>
       )}
 
       <div className="mt-4">
-        <AgentActions prompt={withdrawPrompt} />
+        <AgentActions steps={withdrawSteps} />
       </div>
 
       <p className="mt-3 text-xs leading-relaxed text-ink/40">
